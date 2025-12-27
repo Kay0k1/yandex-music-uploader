@@ -2,13 +2,15 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import User, Track, Playlist
 
+from typing import List
 
-async def create_user(session: AsyncSession, tg_id: int, token: str) -> User:
+
+async def create_user(session: AsyncSession, tg_id: int) -> User:
     user = await get_user(session, tg_id)
     if user:
         return user
 
-    user = User(tg_id=tg_id,token=token)
+    user = User(tg_id=tg_id)
     session.add(user)
     await session.commit()
     await session.refresh(user)
@@ -47,6 +49,15 @@ async def create_playlist(session: AsyncSession, tg_id: int, kind: str, title: s
     await session.commit()
     await session.refresh(new_playlist)
     return new_playlist
+
+async def get_user_playlists(session: AsyncSession, tg_id: int) -> List[Playlist]:
+    query = (
+        select(Playlist)
+        .join(User)
+        .where(User.tg_id == tg_id)
+    )
+    result = await session.execute(query)
+    return result
 
 async def get_active_playlist(session: AsyncSession, tg_id: int) -> Playlist | None:
     query = (
