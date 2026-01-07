@@ -4,10 +4,10 @@ from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 
-from utils.states import UserSteps
-from utils.texts import set_token_text, wrong_token
-from database import crud
-from database.models import async_session
+from src.utils.states import UserSteps
+from src.utils.texts import set_token_text, wrong_token
+from src.database import crud
+from src.database.models import async_session
 
 router = Router()
 

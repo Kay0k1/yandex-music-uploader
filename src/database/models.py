@@ -52,7 +52,9 @@ class Track(Base):
     __tablename__ = 'tracks'
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    artist: Mapped[str] = mapped_column(String, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
+    cover: Mapped[str] = mapped_column(String(256), nullable=True)
     
     user: Mapped["User"] = relationship(back_populates="tracks")
 

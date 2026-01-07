@@ -5,7 +5,7 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from database.models import async_main
+from src.database.models import async_main
 
 from src.handlers.start import router as start_router
 from src.handlers.token import router as token_router

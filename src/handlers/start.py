@@ -1,10 +1,10 @@
 from aiogram import Router, F
 from aiogram.types import Message
 
-from utils.texts import main_menu_text
+from src.utils.texts import main_menu_text
 
-from database import crud
-from database.models import async_session
+from src.database import crud
+from src.database.models import async_session
 
 router = Router()
 
