@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from src.utils.states import UserSteps
 from src.utils.texts import set_token_text, wrong_token
 from src.database import crud
-from src.database.models import async_session
+from src. database.models import async_session
 
 router = Router()
 

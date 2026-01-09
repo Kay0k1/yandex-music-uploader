@@ -1,8 +1,14 @@
+import asyncio
 import logging
 import os
-import asyncio
+import sys
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from src.database.models import async_main
@@ -10,25 +16,45 @@ from src.database.models import async_main
 from src.handlers.start import router as start_router
 from src.handlers.token import router as token_router
 
-logging.basicConfig(level=logging.INFO)
-
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("Set BOT_TOKEN environment variable")
-
-bot = Bot(BOT_TOKEN)
-dp = Dispatcher(storage=MemoryStorage())
-
-dp.include_router(start_router)
-dp.include_router(token_router)
+from src.middlewares.auth_middleware import CheckTokenMiddleware
 
 async def main():
-    await async_main()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    )
+    logger = logging.getLogger(__name__)
+
+    bot_token = os.getenv("BOT_TOKEN")
+    if not bot_token:
+        logger.error("Установите BOT_TOKEN")
+        sys.exit(1)
+
+    bot = Bot(
+        token=bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    )
+
+    dp = Dispatcher(storage=MemoryStorage())
+
+    dp.message.outer_middleware(CheckTokenMiddleware())
+
+    dp.include_router(start_router)
+    dp.include_router(token_router)
+
+    try:
+        await async_main()
+    except Exception as e:
+        logger.error(f"Ошибка подключения к БД: {e}")
+        return
+
+    await bot.delete_webhook(drop_pending_updates=True)
+    
+    logger.info("Бот запущен...")
     await dp.start_polling(bot)
 
-
-if __name__ == '__main__':
-    try:
+if __name__ == "__main__":
+    try:    
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("Exit") 
+        print("Бот остановлен")

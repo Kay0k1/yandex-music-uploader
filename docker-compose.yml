@@ -1,22 +1,29 @@
 version: '3.8'
 
 services:
-  bot_app:
+  bot:
     build: .
-    env_file:
-      - .env
+    container_name: music_bot
+    restart: always
     depends_on:
       - db
-    
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://admin:passz@yandex-music:5432/music_uploader
+
   db:
     image: postgres:15-alpine
+    container_name: music_db
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: passz
+      POSTGRES_DB: music_uploader
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/dataа
+    ports:
+      - "5432:5432"
 
 volumes:
-  pg_data:
+  postgres_data:

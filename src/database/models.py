@@ -3,8 +3,8 @@ from sqlalchemy import BigInteger, String, Integer, ForeignKey, Boolean, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs, async_sessionmaker, create_async_engine
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@db:5432/music_uploader")
-engine = create_async_engine(url=DATABASE_URL)
+db_url = os.getenv("DATABASE_URL")
+engine = create_async_engine(url=db_url)
 
 async_session = async_sessionmaker(engine)
 
@@ -18,9 +18,11 @@ class User(Base):
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tg_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
-    token: Mapped[str] = mapped_column(String, nullable=False)
-    playlist_kind: Mapped[str] = mapped_column(String, nullable=False)
+    token: Mapped[str] = mapped_column(String, nullable=True)
+    playlist_kind: Mapped[str] = mapped_column(String, nullable=True)
     track_count: Mapped[int] = mapped_column(Integer, default=0)
+    
+    playlists: Mapped[list["Playlist"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     
     tracks: Mapped[list["Track"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
