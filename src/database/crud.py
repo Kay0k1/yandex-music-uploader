@@ -50,14 +50,45 @@ async def create_playlist(session: AsyncSession, tg_id: int, kind: str, title: s
     await session.refresh(new_playlist)
     return new_playlist
 
+async def sync_playlists(session: AsyncSession, tg_id: int, yandex_playlists: list) -> None:
+    """
+    yandex_playlists: список объектов Playlist из библиотеки yandex_music
+    """
+    user = await get_user(session, tg_id)
+    if not user:
+        return
+
+    for pl in yandex_playlists:
+        
+        stmt = select(Playlist).where(
+            Playlist.user_id == user.id,
+            Playlist.kind == str(pl.kind)
+        )
+        result = await session.execute(stmt)
+        existing_playlist = result.scalar_one_or_none()
+
+        if existing_playlist:
+            existing_playlist.title = pl.title
+        else:
+            new_pl = Playlist(
+                user_id=user.id,
+                kind=str(pl.kind),
+                title=pl.title,
+                is_active=False
+            )
+            session.add(new_pl)
+    
+    await session.commit()
+
 async def get_user_playlists(session: AsyncSession, tg_id: int) -> List[Playlist]:
     query = (
         select(Playlist)
         .join(User)
         .where(User.tg_id == tg_id)
+        .order_by(Playlist.id)
     )
     result = await session.execute(query)
-    return result
+    return list(result.scalars().all())
 
 async def get_active_playlist(session: AsyncSession, tg_id: int) -> Playlist | None:
     query = (
