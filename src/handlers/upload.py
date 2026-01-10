@@ -1,7 +1,6 @@
 import os
-import shutil
 from aiogram import Router, F, Bot
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardRemove, FSInputFile
 from aiogram.fsm.context import FSMContext
 
@@ -9,7 +8,7 @@ from src.database import crud
 from src.database.models import async_session
 from src.utils.states import UserSteps
 from src.utils.metadata import extract_metadata
-from src.utils.uploader import upload_track_async
+from src.utils.async_uploader import upload_track_async
 
 router = Router()
 
@@ -39,14 +38,14 @@ async def cmd_add_track(message: Message, state: FSMContext):
         f"📂 <b>Режим загрузки включен!</b>\n"
         f"Выбран плейлист: <b>{playlist.title}</b>\n\n"
         f"Кидай мне .mp3 файлы, а я буду их загружать.\n"
-        f"Для выхода нажми /end",
+        f"Для выхода тыкни /end",
         parse_mode="HTML"
     )
 
 @router.message(Command("end"), UserSteps.uploading)
 async def cmd_end_upload(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("✅ Вышли из режима загрузки. Жду команд!", reply_markup=ReplyKeyboardRemove())
+    await message.answer("✅ Вышли из режима загрузки", reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(UserSteps.uploading, F.audio)
@@ -81,7 +80,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
             cover_path=cover_path
         )
 
-        success_text = f"✅ <b>Загружено!</b>\n\n👤 Артист: {artist}\n🎼 Трек: {title}"
+        success_text = f"✅ <b>Загружено!</b>\n\n👤 Артист: {artist}\n🎼 Трек: {title}\n\n кидай еще или тыкай /end для выхода."
         
         await status_msg.delete()
 
