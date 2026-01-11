@@ -13,6 +13,7 @@ greenlet==3.3.0
 idna==3.11
 magic-filter==1.0.12
 multidict==6.7.0
+mutagen==1.47.0
 propcache==0.4.1
 pydantic==2.12.5
 pydantic_core==2.41.5

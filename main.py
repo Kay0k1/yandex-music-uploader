@@ -18,6 +18,7 @@ from src.handlers.token import router as token_router
 from src.handlers.playlist import router as playlist_router
 from src.handlers.upload import router as upload_router
 from src.handlers.help import router as help_router
+from src.handlers.admin import router as admin_router
 
 from src.middlewares.auth_middleware import CheckTokenMiddleware
 
@@ -50,6 +51,7 @@ async def main():
     dp.include_router(playlist_router)
     dp.include_router(upload_router)
     dp.include_router(help_router)
+    dp.include_router(admin_router)
 
     try:
         await async_main()

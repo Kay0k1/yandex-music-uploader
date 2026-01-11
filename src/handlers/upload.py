@@ -51,6 +51,7 @@ async def cmd_end_upload(message: Message, state: FSMContext):
 @router.message(UserSteps.uploading, F.audio)
 async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
     data = await state.get_data()
+    tg_id = message.from_user.id
     token = data.get("token")
     playlist_kind = data.get("playlist_kind")
 
@@ -79,6 +80,9 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
             artist=artist,
             cover_path=cover_path
         )
+        
+        async with async_session() as session:
+            await crud.add_track(session, tg_id, artist, title)
 
         success_text = f"✅ <b>Загружено!</b>\n\n👤 Артист: {artist}\n🎼 Трек: {title}\n\n кидай еще или тыкай /end для выхода."
         

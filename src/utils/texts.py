@@ -13,9 +13,9 @@ main_menu_text = (
 /add - чтобы войти в режим загрузки треков
 /end - чтобы выйти из режима загрузки
 
-/help - инструкция и вопрос/ответ
+/help - инструкция
 
-<a href="https://t.me/BPEMEHHO_404">Связь</a>
+<a href="https://t.me/BPEMEHHO_404">Задать вопрос</a>
 <a href="https://pay.cloudtips.ru/p/932f1bc5">Поддержать</a>
     """
 )
