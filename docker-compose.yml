@@ -9,21 +9,17 @@ services:
       - db
     env_file:
       - .env
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://admin:passz@yandex-music:5432/music_uploader
 
   db:
     image: postgres:15-alpine
     container_name: music_db
     restart: always
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: passz
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: passzTerpodas1!
       POSTGRES_DB: music_uploader
     volumes:
-      - postgres_data:/var/lib/postgresql/dataа
-    ports:
-      - "5432:5432"
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
