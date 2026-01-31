@@ -13,28 +13,27 @@ async def upload_track_async(
     cover_path: Optional[str] = None,
 ) -> None:
     client = await ClientAsync(token).init()
+    uid = client.me.account.uid
     
     file_name = os.path.basename(file_path)
     encoded = urllib.parse.quote(file_name, safe='_!() ')
     encoded = encoded.replace(' ', '+')
 
     params = {
-        'filename': encoded,
-        'kind': playlist_kind,
+        'uid': uid,
+        'playlist-id': f"{uid}:{playlist_kind}",
         'visibility': 'private',
-        'lang': 'ru',
-        'external-domain': 'music.yandex.ru',
-        'overembed': 'false',
+        'path': encoded,
     }
 
-    data = await client.request.get(
-        url='https://music.yandex.ru/handlers/ugc-upload.jsx',
+    data = await client.request.post(
+        url='https://api.music.yandex.net/loader/upload-url',
         params=params,
         timeout=10,
     )
     
-    upload_url = data['post_target'].replace(':443', '', 1)
-    track_id = data.get("track_id")
+    upload_url = data['post-target']
+    track_id = data.get("ugc-track-id")
 
     form = aiohttp.FormData()
 
