@@ -10,20 +10,11 @@ def extract_metadata(file_path: str, default_artist: str = "Unknown Artist", def
     Если обложки нет, path_to_cover_image будет None.
     """
     filename = os.path.basename(file_path)
-    cleaned_filename = filename
-    if "_" in filename:
-        split_idx = -1
-        for i in range(min(80, len(filename)), len(filename)):
-            if filename[i] == "_":
-                split_idx = i
-                break
-        
-        if split_idx != -1:
-            cleaned_filename = filename[split_idx + 1:]
-        else:
-            last_idx = filename.rfind("_")
-            if last_idx > 70:
-                cleaned_filename = filename[last_idx + 1:]
+    # Используем уникальный разделитель __SEP__, чтобы точно отделить file_id от имени файла
+    if "__SEP__" in filename:
+        cleaned_filename = filename.split("__SEP__", 1)[1]
+    else:
+        cleaned_filename = filename
 
     try:
         audio = MP3(file_path, ID3=ID3)
