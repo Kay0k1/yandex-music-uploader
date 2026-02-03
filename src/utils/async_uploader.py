@@ -31,34 +31,34 @@ async def upload_track_async(
         'path': encoded,
     }
 
+    # Получаем URL для загрузки
     data = await client.request.post(
         url='https://api.music.yandex.net/loader/upload-url',
         params=params,
         timeout=10,
     )
     
-    # Проверяем оба варианта написания ключа (API Яндекса может возвращать разные варианты)
+    # API Яндекса может возвращать разные варианты написания ключей
     upload_url = data.get('post-target') or data.get('post_target')
+    track_id = data.get("ugc-track-id") or data.get("ugc_track_id")
     
     if not upload_url:
         error_msg = data.get('message', 'Unknown error') if isinstance(data, dict) else str(data)
         raise Exception(f"Failed to get upload URL. Response API: {error_msg}. Raw: {data}")
 
-    track_id = data.get("ugc-track-id") or data.get("ugc_track_id")
+    # Важно: загружаем файл через чистый aiohttp, чтобы заголовки библиотеки не мешали
+    async with aiohttp.ClientSession() as session:
+        form = aiohttp.FormData()
+        with open(file_path, 'rb') as f:
+            form.add_field('file', f, filename=file_name)
 
-    form = aiohttp.FormData()
-
-    with open(file_path, 'rb') as f:
-        form.add_field('file', f, filename=file_name)
-
-        resp = await client.request.post(
-            url=upload_url,
-            data=form,
-            timeout=300,
-        )
-        
-        if resp != 'CREATED':
-            print(f"Warning: Upload response was {resp}")
+            async with session.post(upload_url, data=form, timeout=300) as resp:
+                result_text = await resp.text()
+                if resp.status != 200 or result_text != 'OK':
+                    # В некоторых случаях Яндекс возвращает 'OK' или 'CREATED'
+                    # Судя по логам, бывает разное. Проверим результат
+                    if result_text not in ('OK', 'CREATED'):
+                        raise Exception(f"Upload failed: HTTP {resp.status}. Response: {result_text}")
 
     if title and track_id:
         full_title = f"{artist} - {title}" if artist and artist != "Unknown Artist" else title
