@@ -9,19 +9,12 @@ def extract_metadata(file_path: str, default_artist: str = "Unknown Artist", def
     Если тегов нет, возвращает переданные дефолты или имя файла.
     Если обложки нет, path_to_cover_image будет None.
     """
-    filename = os.path.basename(file_path)
-    # Используем уникальный разделитель __SEP__, чтобы точно отделить file_id от имени файла
-    if "__SEP__" in filename:
-        cleaned_filename = filename.split("__SEP__", 1)[1]
-    else:
-        cleaned_filename = filename
-
     try:
         audio = MP3(file_path, ID3=ID3)
     except Exception:
-        return default_artist, default_title or cleaned_filename, None
+        return default_artist, default_title or os.path.basename(file_path), None
 
-    title = str(audio.get("TIT2", default_title or cleaned_filename))
+    title = str(audio.get("TIT2", default_title or os.path.basename(file_path)))
     artist = str(audio.get("TPE1", default_artist))
 
     cover_path = None

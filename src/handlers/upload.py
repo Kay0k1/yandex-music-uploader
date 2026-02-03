@@ -61,7 +61,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
     file_name = message.audio.file_name or "track.mp3"
     safe_filename = "".join([c for c in file_name if c.isalpha() or c.isdigit() or c in (' ', '.', '_')]).rstrip()
     
-    file_path = os.path.join(DOWNLOAD_DIR, f"{file_id}__SEP__{safe_filename}")
+    file_path = os.path.join(DOWNLOAD_DIR, f"{file_id}_{safe_filename}")
 
     try:
         await bot.download(message.audio, destination=file_path)

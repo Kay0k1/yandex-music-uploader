@@ -16,13 +16,7 @@ async def upload_track_async(
     uid = client.me.account.uid
     
     file_name = os.path.basename(file_path)
-    # Очищаем имя файла от нашего технического префикса для Яндекса
-    if "__SEP__" in file_name:
-        yandex_file_name = file_name.split("__SEP__", 1)[1]
-    else:
-        yandex_file_name = file_name
-
-    encoded = urllib.parse.quote(yandex_file_name, safe='_!() ')
+    encoded = urllib.parse.quote(file_name, safe='_!() ')
     encoded = encoded.replace(' ', '+')
 
     params = {
@@ -38,10 +32,6 @@ async def upload_track_async(
         timeout=10,
     )
     
-    if 'post-target' not in data:
-        error_msg = data.get('message', 'Unknown error')
-        raise Exception(f"Failed to get upload URL from Yandex: {error_msg}")
-
     upload_url = data['post-target']
     track_id = data.get("ugc-track-id")
 
