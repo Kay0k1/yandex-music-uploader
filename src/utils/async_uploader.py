@@ -18,17 +18,17 @@ async def upload_track_async(
     client = await ClientAsync(token).init()
     uid = client.me.account.uid
     
-    # Мы используем простое имя для Яндекса во избежание ошибок пути
-    final_yandex_name = "track.mp3"
+    # Используем оригинальное имя файла (без file_id, так как мы теперь в подпапке)
+    file_name = os.path.basename(file_path)
+    encoded = urllib.parse.quote(file_name, safe='_!() ')
+    encoded = encoded.replace(' ', '+')
     
     params = {
         'uid': uid,
         'playlist-id': f"{uid}:{playlist_kind}",
         'visibility': 'private',
-        'path': final_yandex_name,
+        'path': encoded,
     }
-
-    logger.info(f"Uploading to Yandex: UID={uid}, PlaylistID={params['playlist-id']}, Path={params['path']}")
 
     data = await client.request.post(
         url='https://api.music.yandex.net/loader/upload-url',
@@ -36,20 +36,19 @@ async def upload_track_async(
         timeout=10,
     )
     
-    logger.info(f"Yandex API Response: {data}")
+    # Проверяем оба варианта написания ключа (API Яндекса может возвращать разные варианты)
+    upload_url = data.get('post-target') or data.get('post_target')
     
-    if not isinstance(data, dict) or 'post-target' not in data:
-        error_msg = data.get('message', 'No message') if isinstance(data, dict) else str(data)
-        logger.error(f"Failed to get upload URL. Data: {data}")
+    if not upload_url:
+        error_msg = data.get('message', 'Unknown error') if isinstance(data, dict) else str(data)
         raise Exception(f"Failed to get upload URL. Response API: {error_msg}. Raw: {data}")
 
-    upload_url = data['post-target']
-    track_id = data.get("ugc-track-id")
+    track_id = data.get("ugc-track-id") or data.get("ugc_track_id")
 
     form = aiohttp.FormData()
 
     with open(file_path, 'rb') as f:
-        form.add_field('file', f, filename=final_yandex_name)
+        form.add_field('file', f, filename=file_name)
 
         resp = await client.request.post(
             url=upload_url,

@@ -61,7 +61,9 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
     file_name = message.audio.file_name or "track.mp3"
     safe_filename = "".join([c for c in file_name if c.isalpha() or c.isdigit() or c in (' ', '.', '_')]).rstrip()
     
-    file_path = os.path.join(DOWNLOAD_DIR, f"{file_id}_{safe_filename}")
+    file_dir = os.path.join(DOWNLOAD_DIR, file_id)
+    os.makedirs(file_dir, exist_ok=True)
+    file_path = os.path.join(file_dir, safe_filename)
 
     try:
         await bot.download(message.audio, destination=file_path)
@@ -106,3 +108,11 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
             os.remove(file_path)
         if cover_path and os.path.exists(cover_path):
             os.remove(cover_path)
+        
+        # Удаляем временную папку, если она пуста
+        file_dir = os.path.dirname(file_path)
+        if os.path.exists(file_dir) and file_dir != DOWNLOAD_DIR:
+            try:
+                os.rmdir(file_dir)
+            except Exception:
+                pass
