@@ -78,6 +78,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
             token=token,
             playlist_kind=playlist_kind,
             file_path=file_path,
+            yandex_filename=safe_filename,
             title=title,
             artist=artist,
             cover_path=cover_path

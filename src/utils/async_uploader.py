@@ -8,6 +8,7 @@ async def upload_track_async(
     token: str,
     playlist_kind: str,
     file_path: str,
+    yandex_filename: Optional[str] = None,
     title: Optional[str] = None,
     artist: Optional[str] = None,
     cover_path: Optional[str] = None,
@@ -15,8 +16,13 @@ async def upload_track_async(
     client = await ClientAsync(token).init()
     uid = client.me.account.uid
     
-    file_name = os.path.basename(file_path)
-    encoded = urllib.parse.quote(file_name, safe='_!() ')
+    # Решаем какое имя отправить в Яндекс (без длинного file_id)
+    final_yandex_name = yandex_filename or os.path.basename(file_path)
+    if "_" in final_yandex_name and len(final_yandex_name.split("_")[0]) > 20:
+        # На всякий случай, если забыли передать yandex_filename, пробуем очистить сами
+        final_yandex_name = final_yandex_name.split("_", 1)[1]
+
+    encoded = urllib.parse.quote(final_yandex_name, safe='_!() ')
     encoded = encoded.replace(' ', '+')
 
     params = {
@@ -32,13 +38,17 @@ async def upload_track_async(
         timeout=10,
     )
     
+    if 'post-target' not in data:
+        error_msg = data.get('message', 'Unknown error (API response missing post-target)')
+        raise Exception(f"Failed to get upload URL from Yandex: {error_msg}")
+
     upload_url = data['post-target']
     track_id = data.get("ugc-track-id")
 
     form = aiohttp.FormData()
 
     with open(file_path, 'rb') as f:
-        form.add_field('file', f, filename=file_name)
+        form.add_field('file', f, filename=final_yandex_name)
 
         resp = await client.request.post(
             url=upload_url,
