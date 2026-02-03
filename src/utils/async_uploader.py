@@ -54,11 +54,14 @@ async def upload_track_async(
 
             async with session.post(upload_url, data=form, timeout=300) as resp:
                 result_text = await resp.text()
-                if resp.status != 200 or result_text != 'OK':
-                    # В некоторых случаях Яндекс возвращает 'OK' или 'CREATED'
-                    # Судя по логам, бывает разное. Проверим результат
-                    if result_text not in ('OK', 'CREATED'):
-                        raise Exception(f"Upload failed: HTTP {resp.status}. Response: {result_text}")
+                # Яндекс может возвращать 200 OK или 201 CREATED (иногда как текст, иногда как JSON)
+                if resp.status not in (200, 201):
+                    raise Exception(f"Upload failed: HTTP {resp.status}. Response: {result_text}")
+                
+                # Проверяем наличие подтверждения в теле ответа
+                upper_text = result_text.upper()
+                if 'OK' not in upper_text and 'CREATED' not in upper_text:
+                    raise Exception(f"Upload completed with HTTP {resp.status} but unexpected body: {result_text}")
 
     if title and track_id:
         full_title = f"{artist} - {title}" if artist and artist != "Unknown Artist" else title
