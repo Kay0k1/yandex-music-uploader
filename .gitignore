@@ -47,7 +47,9 @@ venv.bak/
 
 # --- Docker ---
 postgres_data/
+docker-compose.yml
 docker-compose.override.yml
+!docker-compose.example.yml
 
 # --- Logs ---
 *.log
