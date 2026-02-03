@@ -100,8 +100,10 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
             await message.answer(success_text, parse_mode="HTML")
 
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
         await status_msg.edit_text(f"❌ Ошибка при загрузке: {e}")
-        print(f"Upload error: {e}")
+        print(f"--- UPLOAD ERROR TRACEBACK ---\n{tb}\n-----------------------------")
 
     finally:
         if os.path.exists(file_path):
