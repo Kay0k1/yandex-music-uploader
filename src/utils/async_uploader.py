@@ -16,21 +16,15 @@ async def upload_track_async(
     client = await ClientAsync(token).init()
     uid = client.me.account.uid
     
-    # Решаем какое имя отправить в Яндекс (без длинного file_id)
-    final_yandex_name = yandex_filename or os.path.basename(file_path)
-    if "_" in final_yandex_name and len(final_yandex_name.split("_")[0]) > 20:
-        # На всякий случай, если забыли передать yandex_filename, пробуем очистить сами
-        final_yandex_name = final_yandex_name.split("_", 1)[1]
-
-    encoded = urllib.parse.quote(final_yandex_name, safe='_!() ')
-    encoded = encoded.replace(' ', '+')
-
     params = {
         'uid': uid,
         'playlist-id': f"{uid}:{playlist_kind}",
         'visibility': 'private',
-        'path': encoded,
+        'path': "track.mp3", # Упрощаем путь для теста
     }
+
+    # DEBUG: Логируем параметры для Яндекса
+    print(f"DEBUG: UID={uid}, PlaylistID={params['playlist-id']}, Path={params['path']}")
 
     data = await client.request.post(
         url='https://api.music.yandex.net/loader/upload-url',
@@ -38,9 +32,12 @@ async def upload_track_async(
         timeout=10,
     )
     
-    if 'post-target' not in data:
-        error_msg = data.get('message', 'Unknown error (API response missing post-target)')
-        raise Exception(f"Failed to get upload URL from Yandex: {error_msg}")
+    # DEBUG: Логируем полный ответ
+    print(f"DEBUG: Yandex Response Data={data}")
+    
+    if not isinstance(data, dict) or 'post-target' not in data:
+        error_msg = data.get('message', 'Unknown error') if isinstance(data, dict) else str(data)
+        raise Exception(f"Failed to get upload URL. Response: {error_msg}")
 
     upload_url = data['post-target']
     track_id = data.get("ugc-track-id")
