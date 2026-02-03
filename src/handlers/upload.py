@@ -68,7 +68,9 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
 
         await status_msg.edit_text("🎵 Читаю метаданные...")
 
-        artist, title, cover_path = extract_metadata(file_path)
+        artist_fallback = message.audio.performer or "Unknown Artist"
+        title_fallback = message.audio.title or None
+        artist, title, cover_path = extract_metadata(file_path, artist_fallback, title_fallback)
 
         await status_msg.edit_text(f"🚀 Загружаю в Яндекс: <b>{artist} - {title}</b>...", parse_mode="HTML")
 
