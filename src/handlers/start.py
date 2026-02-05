@@ -1,7 +1,8 @@
 from aiogram import Router, F
 from aiogram.types import Message
 
-from src.utils.texts import main_menu_text
+from src.utils.texts import welcome_no_auth, welcome_with_auth
+from src.handlers.auth import get_auth_keyboard
 
 from src.database import crud
 from src.database.models import async_session
@@ -14,8 +15,18 @@ async def cmdstart(message: Message):
 
     async with async_session() as session:
         await crud.create_user(session, tg_id)
+        token = await crud.get_token(session, tg_id)
 
-    await message.answer(
-        main_menu_text,
-        parse_mode="HTML"
-    )
+    if token:
+        # Пользователь уже авторизован
+        await message.answer(
+            welcome_with_auth,
+            parse_mode="HTML"
+        )
+    else:
+        # Нужна авторизация
+        await message.answer(
+            welcome_no_auth,
+            parse_mode="HTML",
+            reply_markup=get_auth_keyboard()
+        )
