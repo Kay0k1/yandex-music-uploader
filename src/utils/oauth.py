@@ -10,9 +10,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ID приложения "Yandex.Music for Smart TV" (или схожего устройства)
-CLIENT_ID = '23c50c5a49f34069a938148e18fb0120'
-CLIENT_SECRET = '53bc75238f0c4d08a118e51fe9203300'
+# ID приложения "Яндекс.Станция" (работает для Device Flow)
+CLIENT_ID = 'c0ebe342af7d48fbbbfcf2d2eedb8f9e'
+CLIENT_SECRET = 'ad0a908f0aa341a182a37ecd75bc319e'
 
 DEVICE_CODE_URL = 'https://oauth.yandex.ru/device/code'
 TOKEN_URL = 'https://oauth.yandex.ru/token'
