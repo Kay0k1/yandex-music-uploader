@@ -1,4 +1,5 @@
 import os
+import html
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardRemove, FSInputFile
@@ -74,7 +75,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
         title_fallback = message.audio.title or None
         artist, title, cover_path = extract_metadata(file_path, artist_fallback, title_fallback)
 
-        await status_msg.edit_text(f"🚀 Загружаю в Яндекс: <b>{artist} - {title}</b>...", parse_mode="HTML")
+        await status_msg.edit_text(f"🚀 Загружаю в Яндекс: <b>{html.escape(artist)} - {html.escape(title)}</b>...", parse_mode="HTML")
 
         await upload_track_async(
             token=token,
@@ -89,7 +90,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
         async with async_session() as session:
             await crud.add_track(session, tg_id, artist, title)
 
-        success_text = f"✅ <b>Загружено!</b>\n\n👤 Артист: {artist}\n🎼 Трек: {title}\n\n кидай еще или тыкай /end для выхода."
+        success_text = f"✅ <b>Загружено!</b>\n\n👤 Артист: {html.escape(artist)}\n🎼 Трек: {html.escape(title)}\n\n кидай еще или тыкай /end для выхода."
 
         await status_msg.delete()
 
