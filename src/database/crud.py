@@ -50,6 +50,23 @@ async def create_playlist(session: AsyncSession, tg_id: int, kind: str, title: s
     await session.refresh(new_playlist)
     return new_playlist
 
+async def create_playlist_and_set_active(session: AsyncSession, tg_id: int, kind: str, title: str) -> Playlist:
+    """Создаёт плейлист в БД и сразу делает его активным"""
+    user = await get_user(session, tg_id)
+    if not user:
+        raise ValueError("User not found")
+
+    await session.execute(
+        update(Playlist).where(Playlist.user_id == user.id).values(is_active=False)
+    )
+
+    new_playlist = Playlist(user_id=user.id, kind=kind, title=title, is_active=True)
+    session.add(new_playlist)
+    await session.commit()
+    await session.refresh(new_playlist)
+    return new_playlist
+
+
 async def sync_playlists(session: AsyncSession, tg_id: int, yandex_playlists: list) -> None:
     """
     yandex_playlists: список объектов Playlist из библиотеки yandex_music

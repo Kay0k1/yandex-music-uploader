@@ -74,7 +74,6 @@ help_text = (
 )
 
 
-# OAuth Device Flow texts
 auth_prompt = """
 🔐 <b>Авторизация в Yandex Music</b>
 

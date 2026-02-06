@@ -18,33 +18,31 @@ async def upload_track_async(
 ) -> None:
     client = await ClientAsync(token).init()
     uid = client.me.account.uid
-    
+
     file_name = os.path.basename(file_path)
     encoded = urllib.parse.quote(file_name, safe='_!() ')
     encoded = encoded.replace(' ', '+')
-    
+
     url_req = f'https://api.music.yandex.net/loader/upload-url?uid={uid}&playlist-id={uid}:{playlist_kind}&visibility=private&path={encoded}'
-    
+
     logger.info(f"Requesting upload URL: {url_req}")
 
     async with aiohttp.ClientSession() as session:
-        # 1. Получаем URL для загрузки
         headers = {"Authorization": f"OAuth {token}"}
         async with session.post(url_req, headers=headers) as resp_url:
             if resp_url.status != 200:
                 text = await resp_url.text()
                 raise Exception(f"Failed to get upload URL: HTTP {resp_url.status}. Response: {text}")
             data = await resp_url.json()
-        
+
         logger.info(f"Yandex Upload URL Data: {data}")
 
         upload_url = data.get('post-target') or data.get('post_target')
         track_id = data.get("ugc-track-id") or data.get("ugc_track_id")
-        
+
         if not upload_url:
             raise Exception(f"No upload URL in response. Data: {data}")
 
-        # 2. Загружаем файл
         logger.info(f"Uploading file to: {upload_url}")
         form = aiohttp.FormData()
         with open(file_path, 'rb') as f:
@@ -53,20 +51,18 @@ async def upload_track_async(
             async with session.post(upload_url, data=form, timeout=300) as resp:
                 result_text = await resp.text()
                 logger.info(f"Upload Result (HTTP {resp.status}): {result_text}")
-                
+
                 if resp.status not in (200, 201):
                     raise Exception(f"Upload failed: HTTP {resp.status}. Response: {result_text}")
-                
-                # Некоторые серверы возвращают JSON, некоторые плоскую строку
+
                 upper_text = result_text.upper()
                 if 'OK' not in upper_text and 'CREATED' not in upper_text:
                     raise Exception(f"Upload unexpected body: {result_text}")
 
-    # 3. Переименовываем и ставим обложку через библиотеку (там сложные подписи могут быть)
     if title and track_id:
         logger.info(f"Renaming track {track_id} to: {artist} - {title}")
         full_title = f"{artist} - {title}" if artist and artist != "Unknown Artist" else title
-        
+
         try:
             await client.request.post(
                 url="https://music.yandex.ru/api/v2/handlers/edit-track-name",
@@ -75,7 +71,6 @@ async def upload_track_async(
             )
         except Exception as e:
             logger.error(f"Failed to rename track: {e}")
-            # Не бросаем ошибку, так как файл уже загружен, это не критично
             pass
 
     if cover_path and os.path.exists(cover_path) and track_id:

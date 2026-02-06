@@ -26,7 +26,7 @@ async def cmd_add_track(message: Message, state: FSMContext):
     if not token:
         await message.answer("Сначала установи токен: /set_token")
         return
-    
+
     if not playlist:
         await message.answer("Сначала выбери плейлист: /set_playlist")
         return
@@ -60,7 +60,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
     file_id = message.audio.file_id
     file_name = message.audio.file_name or "track.mp3"
     safe_filename = "".join([c for c in file_name if c.isalpha() or c.isdigit() or c in (' ', '.', '_')]).rstrip()
-    
+
     file_dir = os.path.join(DOWNLOAD_DIR, file_id)
     os.makedirs(file_dir, exist_ok=True)
     file_path = os.path.join(file_dir, safe_filename)
@@ -85,12 +85,12 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
             artist=artist,
             cover_path=cover_path
         )
-        
+
         async with async_session() as session:
             await crud.add_track(session, tg_id, artist, title)
 
         success_text = f"✅ <b>Загружено!</b>\n\n👤 Артист: {artist}\n🎼 Трек: {title}\n\n кидай еще или тыкай /end для выхода."
-        
+
         await status_msg.delete()
 
         if cover_path:
@@ -110,8 +110,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
             os.remove(file_path)
         if cover_path and os.path.exists(cover_path):
             os.remove(cover_path)
-        
-        # Удаляем временную папку, если она пуста
+
         file_dir = os.path.dirname(file_path)
         if os.path.exists(file_dir) and file_dir != DOWNLOAD_DIR:
             try:

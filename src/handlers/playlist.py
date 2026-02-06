@@ -29,7 +29,14 @@ async def cmd_set_playlist(message: Message, state: FSMContext):
         yandex_playlists = await client.users_playlists_list()
         
         if not yandex_playlists:
-            await wait_message.edit_text("У тебя нет плейлистов в Яндекс Музыке :(")
+            # Создаём плейлист "Загрузки" автоматически
+            await wait_message.edit_text("📁 Плейлистов нет, создаю «Загрузки»...")
+            new_playlist = await client.users_playlists_create("Загрузки", visibility="private")
+            
+            async with async_session() as session:
+                await crud.create_playlist_and_set_active(session, tg_id, str(new_playlist.kind), new_playlist.title)
+            
+            await wait_message.edit_text(f"✅ Создан плейлист «{new_playlist.title}»! Он уже выбран. Можешь загружать треки через /add")
             return
 
         async with async_session() as session:
