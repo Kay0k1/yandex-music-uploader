@@ -20,7 +20,7 @@ async def cmd_auth(message: Message):
     tg_id = message.from_user.id
     
     async with async_session() as session:
-        await crud.create_user(session, tg_id)
+        await crud.create_user(session, tg_id, message.from_user.username)
     
     await _start_auth_flow(message, tg_id, is_callback=False)
 

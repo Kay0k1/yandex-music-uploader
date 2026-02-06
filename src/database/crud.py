@@ -5,12 +5,16 @@ from src.database.models import User, Track, Playlist
 from typing import List
 
 
-async def create_user(session: AsyncSession, tg_id: int) -> User:
+async def create_user(session: AsyncSession, tg_id: int, username: str = None) -> User:
     user = await get_user(session, tg_id)
     if user:
+        # Обновляем username если изменился
+        if username and user.username != username:
+            user.username = username
+            await session.commit()
         return user
 
-    user = User(tg_id=tg_id)
+    user = User(tg_id=tg_id, username=username)
     session.add(user)
     await session.commit()
     await session.refresh(user)
@@ -171,14 +175,15 @@ async def get_global_stats(session: AsyncSession):
     tracks_count = await session.scalar(select(func.count(Track.id)))
     return users_count, tracks_count
 
-async def get_top_users(session: AsyncSession, limit: int = 10):
+async def get_top_users(session: AsyncSession, limit: int = 10, offset: int = 0):
     """Возвращает топ юзеров по количеству загрузок"""
-    query = select(User).order_by(User.track_count.desc()).limit(limit)
+    query = select(User).where(User.track_count > 0).order_by(User.track_count.desc()).offset(offset).limit(limit)
     result = await session.execute(query)
     return result.scalars().all()
 
-async def get_last_tracks(session: AsyncSession, limit: int = 10):
+async def get_last_tracks(session: AsyncSession, limit: int = 10, offset: int = 0):
     """Возвращает последние загруженные треки вместе с инфой о юзере"""
-    query = select(Track).join(User).order_by(Track.id.desc()).limit(limit)
+    from sqlalchemy.orm import selectinload
+    query = select(Track).options(selectinload(Track.user)).order_by(Track.id.desc()).offset(offset).limit(limit)
     result = await session.execute(query)
     return result.scalars().all()

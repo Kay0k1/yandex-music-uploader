@@ -18,6 +18,7 @@ class User(Base):
     
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     tg_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    username: Mapped[str] = mapped_column(String(64), nullable=True)
     token: Mapped[str] = mapped_column(String, nullable=True)
     playlist_kind: Mapped[str] = mapped_column(String, nullable=True)
     track_count: Mapped[int] = mapped_column(Integer, default=0)

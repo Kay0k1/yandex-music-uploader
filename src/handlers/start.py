@@ -14,7 +14,7 @@ async def cmdstart(message: Message):
     tg_id = message.from_user.id
 
     async with async_session() as session:
-        await crud.create_user(session, tg_id)
+        await crud.create_user(session, tg_id, message.from_user.username)
         token = await crud.get_token(session, tg_id)
 
     if token:
