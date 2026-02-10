@@ -1,14 +1,19 @@
 import os
 import html
-from aiogram import Router, F
+import asyncio
+import logging
+from aiogram import Router, F, Bot
 from aiogram.filters import Command, BaseFilter
 from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from src.database import crud
 from src.database.models import async_session
+from src.utils.states import BroadcastStates
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 PAGE_SIZE = 10
@@ -24,6 +29,7 @@ def get_admin_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="🏆 Топ пользователей", callback_data="admin_top:0")
     builder.button(text="🎵 Последние треки", callback_data="admin_tracks:0")
+    builder.button(text="📢 Бродкаст", callback_data="admin_broadcast")
     builder.button(text="🔄 Обновить стату", callback_data="admin_refresh")
     builder.adjust(1)
     return builder.as_markup()
@@ -130,3 +136,112 @@ async def cb_last_tracks(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
+
+
+# ─── Broadcast ───────────────────────────────────────
+
+@router.callback_query(F.data == "admin_broadcast", AdminFilter())
+async def cb_broadcast_start(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(BroadcastStates.waiting_for_message)
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отмена", callback_data="admin_broadcast_cancel")
+    
+    await callback.message.edit_text(
+        "<b>📢 Бродкаст</b>\n\n"
+        "Отправь мне сообщение, которое я разошлю всем пользователям.\n\n"
+        "Поддерживается: текст, фото, видео, аудио, документ.\n"
+        "Форматирование (жирный, курсив) сохранится.",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_broadcast_cancel", AdminFilter())
+async def cb_broadcast_cancel(callback: CallbackQuery, state: FSMContext):
+    await state.clear()
+    await cb_refresh(callback)
+
+
+@router.message(BroadcastStates.waiting_for_message, AdminFilter())
+async def handle_broadcast_message(message: Message, state: FSMContext, bot: Bot):
+    await state.clear()
+    
+    async with async_session() as session:
+        tg_ids = await crud.get_all_tg_ids(session)
+
+    total = len(tg_ids)
+    success = 0
+    failed = 0
+
+    status_msg = await message.answer(
+        f"📢 <b>Рассылка запущена...</b>\n\n"
+        f"👥 Всего: {total}\n"
+        f"⏳ Отправлено: 0/{total}",
+        parse_mode="HTML"
+    )
+
+    for i, tg_id in enumerate(tg_ids):
+        try:
+            if message.photo:
+                await bot.send_photo(
+                    tg_id,
+                    photo=message.photo[-1].file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                )
+            elif message.video:
+                await bot.send_video(
+                    tg_id,
+                    video=message.video.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                )
+            elif message.audio:
+                await bot.send_audio(
+                    tg_id,
+                    audio=message.audio.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                )
+            elif message.document:
+                await bot.send_document(
+                    tg_id,
+                    document=message.document.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                )
+            else:
+                await bot.send_message(
+                    tg_id,
+                    text=message.text,
+                    entities=message.entities,
+                )
+            success += 1
+        except Exception as e:
+            failed += 1
+            logger.warning(f"Broadcast failed for {tg_id}: {e}")
+        
+        # Telegram rate limit: ~30 msg/sec
+        if (i + 1) % 25 == 0:
+            await asyncio.sleep(1)
+            try:
+                await status_msg.edit_text(
+                    f"📢 <b>Рассылка...</b>\n\n"
+                    f"✅ Доставлено: {success}\n"
+                    f"❌ Не доставлено: {failed}\n"
+                    f"⏳ Прогресс: {i + 1}/{total}",
+                    parse_mode="HTML"
+                )
+            except:
+                pass
+
+    await status_msg.edit_text(
+        f"📢 <b>Рассылка завершена!</b>\n\n"
+        f"✅ Доставлено: <b>{success}</b>\n"
+        f"❌ Не доставлено: <b>{failed}</b>\n"
+        f"👥 Всего: <b>{total}</b>",
+        reply_markup=get_admin_keyboard(),
+        parse_mode="HTML"
+    )

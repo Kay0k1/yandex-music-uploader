@@ -187,3 +187,9 @@ async def get_last_tracks(session: AsyncSession, limit: int = 10, offset: int = 
     query = select(Track).options(selectinload(Track.user)).order_by(Track.id.desc()).offset(offset).limit(limit)
     result = await session.execute(query)
     return result.scalars().all()
+
+async def get_all_tg_ids(session: AsyncSession) -> list[int]:
+    """Возвращает список всех tg_id пользователей"""
+    query = select(User.tg_id)
+    result = await session.execute(query)
+    return list(result.scalars().all())
