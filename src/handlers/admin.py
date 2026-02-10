@@ -184,40 +184,7 @@ async def handle_broadcast_message(message: Message, state: FSMContext, bot: Bot
 
     for i, tg_id in enumerate(tg_ids):
         try:
-            if message.photo:
-                await bot.send_photo(
-                    tg_id,
-                    photo=message.photo[-1].file_id,
-                    caption=message.caption,
-                    caption_entities=message.caption_entities,
-                )
-            elif message.video:
-                await bot.send_video(
-                    tg_id,
-                    video=message.video.file_id,
-                    caption=message.caption,
-                    caption_entities=message.caption_entities,
-                )
-            elif message.audio:
-                await bot.send_audio(
-                    tg_id,
-                    audio=message.audio.file_id,
-                    caption=message.caption,
-                    caption_entities=message.caption_entities,
-                )
-            elif message.document:
-                await bot.send_document(
-                    tg_id,
-                    document=message.document.file_id,
-                    caption=message.caption,
-                    caption_entities=message.caption_entities,
-                )
-            else:
-                await bot.send_message(
-                    tg_id,
-                    text=message.text,
-                    entities=message.entities,
-                )
+            await message.copy_to(tg_id)
             success += 1
         except Exception as e:
             failed += 1
