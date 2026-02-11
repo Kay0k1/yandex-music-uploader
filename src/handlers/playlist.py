@@ -71,3 +71,25 @@ async def process_playlist_selection(callback: CallbackQuery, callback_data: Pla
         pass
 
     await callback.answer("Плейлист выбран!")
+
+
+@router.callback_query(F.data == "main_menu")
+async def process_main_menu(callback: CallbackQuery):
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    
+    # Import here to avoid circular import if necessary, or ensure cmdstart is available. 
+    # Since cmdstart is in another module, we can just call the start logic directly 
+    # or import the handler. 
+    # To be safe and clean, let's just trigger the start command logic.
+    # Actually, better to send the text directly to avoid circular dependency issues with 'start.py'
+    
+    from src.handlers.start import cmdstart
+    # We need to create a dummy message or just call the logic. 
+    # calling cmdstart requires a Message object which we might not want to mock.
+    # Let's just replicate the start logic or redirect.
+    
+    # Simpler: just call cmdstart with the message from callback
+    await cmdstart(callback.message)
