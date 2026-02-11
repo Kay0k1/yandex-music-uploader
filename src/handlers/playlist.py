@@ -6,8 +6,9 @@ from yandex_music import ClientAsync
 
 from src.database import crud
 from src.database.models import async_session
-from src.utils.texts import set_active_playlist
+from src.utils.texts import set_active_playlist, welcome_with_auth, welcome_no_auth
 from src.utils.keyboards import get_playlists_keyboard, PlaylistCallback
+from src.handlers.auth import get_auth_keyboard
 
 router = Router()
 
@@ -80,16 +81,23 @@ async def process_main_menu(callback: CallbackQuery):
     except Exception:
         pass
     
-    # Import here to avoid circular import if necessary, or ensure cmdstart is available. 
-    # Since cmdstart is in another module, we can just call the start logic directly 
-    # or import the handler. 
-    # To be safe and clean, let's just trigger the start command logic.
-    # Actually, better to send the text directly to avoid circular dependency issues with 'start.py'
-    
-    from src.handlers.start import cmdstart
-    # We need to create a dummy message or just call the logic. 
-    # calling cmdstart requires a Message object which we might not want to mock.
-    # Let's just replicate the start logic or redirect.
-    
-    # Simpler: just call cmdstart with the message from callback
-    await cmdstart(callback.message)
+    tg_id = callback.from_user.id
+
+    async with async_session() as session:
+        # Check if user exists/token is present.
+        # Although user should exist if they are in this menu, good to be safe.
+        token = await crud.get_token(session, tg_id)
+
+    if token:
+        # User is authorized
+        await callback.message.answer(
+            welcome_with_auth,
+            parse_mode="HTML"
+        )
+    else:
+        # Need authorization (fallback)
+        await callback.message.answer(
+            welcome_no_auth,
+            parse_mode="HTML",
+            reply_markup=get_auth_keyboard()
+        )
