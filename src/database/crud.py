@@ -8,7 +8,6 @@ from typing import List
 async def create_user(session: AsyncSession, tg_id: int, username: str = None) -> User:
     user = await get_user(session, tg_id)
     if user:
-        # Обновляем username если изменился
         if username and user.username != username:
             user.username = username
             await session.commit()

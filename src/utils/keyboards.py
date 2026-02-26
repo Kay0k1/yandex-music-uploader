@@ -11,10 +11,8 @@ def get_playlists_keyboard(playlists: list) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     for pl in playlists:
-        # User requested specific styles encountered in docs/screenshot:
-        # success (Green), danger (Red)
         style = "success" if pl.is_active else "danger"
-        text = pl.title  # No emojis directly in text
+        text = pl.title
         
         builder.button(
             text=text,
@@ -24,7 +22,6 @@ def get_playlists_keyboard(playlists: list) -> InlineKeyboardMarkup:
 
     builder.adjust(1)
 
-    # Add Main Menu button (Blue/Primary)
     builder.row(
         InlineKeyboardButton(
             text="Главное меню",

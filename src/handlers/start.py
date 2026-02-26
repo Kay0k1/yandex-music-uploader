@@ -18,13 +18,11 @@ async def cmdstart(message: Message):
         token = await crud.get_token(session, tg_id)
 
     if token:
-        # Пользователь уже авторизован
         await message.answer(
             welcome_with_auth,
             parse_mode="HTML"
         )
     else:
-        # Нужна авторизация
         await message.answer(
             welcome_no_auth,
             parse_mode="HTML",

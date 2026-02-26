@@ -84,18 +84,14 @@ async def process_main_menu(callback: CallbackQuery):
     tg_id = callback.from_user.id
 
     async with async_session() as session:
-        # Check if user exists/token is present.
-        # Although user should exist if they are in this menu, good to be safe.
         token = await crud.get_token(session, tg_id)
 
     if token:
-        # User is authorized
         await callback.message.answer(
             welcome_with_auth,
             parse_mode="HTML"
         )
     else:
-        # Need authorization (fallback)
         await callback.message.answer(
             welcome_no_auth,
             parse_mode="HTML",
