@@ -53,3 +53,11 @@ docker-compose.override.yml
 
 # --- Logs ---
 *.log
+
+# --- Database backups ---
+*.sql
+*.dump
+*.bak
+
+# --- Shell scripts (utility) ---
+get-docker.sh

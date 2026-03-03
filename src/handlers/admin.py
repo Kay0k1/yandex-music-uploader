@@ -166,8 +166,46 @@ async def cb_broadcast_cancel(callback: CallbackQuery, state: FSMContext):
 
 @router.message(BroadcastStates.waiting_for_message, AdminFilter())
 async def handle_broadcast_message(message: Message, state: FSMContext, bot: Bot):
+    """Шаг 1: получаем сообщение для рассылки, показываем превью и запрашиваем подтверждение."""
+    async with async_session() as session:
+        total = len(await crud.get_all_tg_ids(session))
+
+    # Сохраняем идентификаторы сообщения в FSM для последующей рассылки
+    await state.update_data(
+        src_chat_id=message.chat.id,
+        src_message_id=message.message_id,
+    )
+    await state.set_state(BroadcastStates.waiting_for_confirm)
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Подтвердить рассылку", callback_data="admin_broadcast_confirm")
+    builder.button(text="❌ Отмена", callback_data="admin_broadcast_cancel")
+    builder.adjust(1)
+
+    await message.answer(
+        f"📢 <b>Подтверди рассылку</b>\n\n"
+        f"👆 Сообщение выше будет отправлено <b>{total}</b> пользователям.\n\n"
+        f"⚠️ Действие необратимо. Продолжить?",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data == "admin_broadcast_confirm", AdminFilter())
+async def cb_broadcast_confirm(callback: CallbackQuery, state: FSMContext, bot: Bot):
+    """Шаг 2: выполняем рассылку после подтверждения."""
+    data = await state.get_data()
     await state.clear()
-    
+
+    src_chat_id = data.get("src_chat_id")
+    src_message_id = data.get("src_message_id")
+
+    if not src_chat_id or not src_message_id:
+        await callback.answer("❌ Данные рассылки устарели. Начни заново.", show_alert=True)
+        return
+
+    await callback.answer()
+
     async with async_session() as session:
         tg_ids = await crud.get_all_tg_ids(session)
 
@@ -175,21 +213,25 @@ async def handle_broadcast_message(message: Message, state: FSMContext, bot: Bot
     success = 0
     failed = 0
 
-    status_msg = await message.answer(
+    status_msg = await callback.message.answer(
         f"📢 <b>Рассылка запущена...</b>\n\n"
         f"👥 Всего: {total}\n"
         f"⏳ Отправлено: 0/{total}",
-        parse_mode="HTML"
+        parse_mode="HTML",
     )
 
     for i, tg_id in enumerate(tg_ids):
         try:
-            await message.copy_to(tg_id)
+            await bot.copy_message(
+                chat_id=tg_id,
+                from_chat_id=src_chat_id,
+                message_id=src_message_id,
+            )
             success += 1
         except Exception as e:
             failed += 1
             logger.warning(f"Broadcast failed for {tg_id}: {e}")
-        
+
         # Telegram rate limit: ~30 msg/sec
         if (i + 1) % 25 == 0:
             await asyncio.sleep(1)
@@ -199,9 +241,9 @@ async def handle_broadcast_message(message: Message, state: FSMContext, bot: Bot
                     f"✅ Доставлено: {success}\n"
                     f"❌ Не доставлено: {failed}\n"
                     f"⏳ Прогресс: {i + 1}/{total}",
-                    parse_mode="HTML"
+                    parse_mode="HTML",
                 )
-            except:
+            except Exception:
                 pass
 
     await status_msg.edit_text(
@@ -210,5 +252,5 @@ async def handle_broadcast_message(message: Message, state: FSMContext, bot: Bot
         f"❌ Не доставлено: <b>{failed}</b>\n"
         f"👥 Всего: <b>{total}</b>",
         reply_markup=get_admin_keyboard(),
-        parse_mode="HTML"
+        parse_mode="HTML",
     )

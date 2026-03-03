@@ -1,6 +1,7 @@
 from sqlalchemy import select, update, delete, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import User, Track, Playlist
+from src.utils.crypto import encrypt_token, decrypt_token
 
 from typing import List
 
@@ -24,19 +25,25 @@ async def get_user(session: AsyncSession, tg_id: int) -> User | None:
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
-async def set_token(session: AsyncSession, tg_id: int, token: str) -> str:
+async def set_token(session: AsyncSession, tg_id: int, token: str) -> None:
+    """Шифрует токен и сохраняет в базу данных."""
+    encrypted = encrypt_token(token)
     stmt = (
         update(User)
         .where(User.tg_id == tg_id)
-        .values(token=token)
+        .values(token=encrypted)
     )
     await session.execute(stmt)
     await session.commit()
 
 async def get_token(session: AsyncSession, tg_id: int) -> str | None:
+    """Читает токен из базы и расшифровывает его."""
     query = select(User.token).where(User.tg_id == tg_id)
     result = await session.execute(query)
-    return result.scalar_one_or_none()
+    encrypted = result.scalar_one_or_none()
+    if encrypted is None:
+        return None
+    return decrypt_token(encrypted)
 
 async def create_playlist(session: AsyncSession, tg_id: int, kind: str, title: str) -> Playlist:
     user = await get_user(session, tg_id)

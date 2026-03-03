@@ -3,15 +3,23 @@ OAuth 2.0 Device Flow для Yandex Music.
 
 Используем client_id/secret от Smart TV приложения для получения
 полных прав на редактирование плейлистов.
+
+Переменные окружения:
+    YANDEX_CLIENT_ID     — Client ID приложения Yandex OAuth
+    YANDEX_CLIENT_SECRET — Client Secret приложения Yandex OAuth
 """
+import os
 import aiohttp
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 
-CLIENT_ID = '23cabbbdc6cd418abb4b39c32c41195d'
-CLIENT_SECRET = '53bc75238f0c4d08a118e51fe9203300'
+# Загружаем из переменных окружения; значения по умолчанию — публичные
+# credentials Smart TV приложения, используемые в open-source клиентах.
+# Настоятельно рекомендуется переопределить через YANDEX_CLIENT_ID/SECRET в .env.
+CLIENT_ID = os.getenv('YANDEX_CLIENT_ID', '23cabbbdc6cd418abb4b39c32c41195d')
+CLIENT_SECRET = os.getenv('YANDEX_CLIENT_SECRET', '53bc75238f0c4d08a118e51fe9203300')
 
 DEVICE_CODE_URL = 'https://oauth.yandex.ru/device/code'
 TOKEN_URL = 'https://oauth.yandex.ru/token'
