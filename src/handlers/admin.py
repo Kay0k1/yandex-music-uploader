@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 PAGE_SIZE = 10
+MAX_PAGE = 100
 
 
 class AdminFilter(BaseFilter):
@@ -81,6 +82,9 @@ async def cb_refresh(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("admin_top:"), AdminFilter())
 async def cb_top_users(callback: CallbackQuery):
     page = int(callback.data.split(":")[1])
+    if page < 0 or page > MAX_PAGE:
+        await callback.answer("Недопустимый номер страницы", show_alert=True)
+        return
     offset = page * PAGE_SIZE
     
     async with async_session() as session:
@@ -109,6 +113,9 @@ async def cb_top_users(callback: CallbackQuery):
 @router.callback_query(F.data.startswith("admin_tracks:"), AdminFilter())
 async def cb_last_tracks(callback: CallbackQuery):
     page = int(callback.data.split(":")[1])
+    if page < 0 or page > MAX_PAGE:
+        await callback.answer("Недопустимый номер страницы", show_alert=True)
+        return
     offset = page * PAGE_SIZE
     
     async with async_session() as session:

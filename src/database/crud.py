@@ -1,4 +1,4 @@
-from sqlalchemy import select, update, delete, func, desc
+from sqlalchemy import select, update, delete, func, desc, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import User, Track, Playlist
 from src.utils.crypto import encrypt_token, decrypt_token
@@ -85,26 +85,24 @@ async def sync_playlists(session: AsyncSession, tg_id: int, yandex_playlists: li
     if not user:
         return
 
-    for pl in yandex_playlists:
-        
-        stmt = select(Playlist).where(
-            Playlist.user_id == user.id,
-            Playlist.kind == str(pl.kind)
-        )
-        result = await session.execute(stmt)
-        existing_playlist = result.scalar_one_or_none()
+    # Один запрос вместо N: загружаем все плейлисты пользователя сразу
+    result = await session.execute(
+        select(Playlist).where(Playlist.user_id == user.id)
+    )
+    existing = {pl.kind: pl for pl in result.scalars().all()}
 
-        if existing_playlist:
-            existing_playlist.title = pl.title
+    for pl in yandex_playlists:
+        kind_str = str(pl.kind)
+        if kind_str in existing:
+            existing[kind_str].title = pl.title
         else:
-            new_pl = Playlist(
+            session.add(Playlist(
                 user_id=user.id,
-                kind=str(pl.kind),
+                kind=kind_str,
                 title=pl.title,
                 is_active=False
-            )
-            session.add(new_pl)
-    
+            ))
+
     await session.commit()
 
 async def get_user_playlists(session: AsyncSession, tg_id: int) -> List[Playlist]:
@@ -145,16 +143,11 @@ async def set_active_playlist(session: AsyncSession, tg_id: int, playlist_id: in
     if not user:
         return
 
+    # Единый атомарный UPDATE: is_active=True только для нужного плейлиста, остальные False
     await session.execute(
         update(Playlist)
         .where(Playlist.user_id == user.id)
-        .values(is_active=False)
-    )
-
-    await session.execute(
-        update(Playlist)
-        .where(Playlist.id == playlist_id, Playlist.user_id == user.id)
-        .values(is_active=True)
+        .values(is_active=case((Playlist.id == playlist_id, True), else_=False))
     )
 
     await session.commit()

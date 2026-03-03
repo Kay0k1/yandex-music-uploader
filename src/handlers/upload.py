@@ -1,5 +1,6 @@
 import os
 import html
+import asyncio
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.types import Message, ReplyKeyboardRemove, FSInputFile
@@ -15,6 +16,7 @@ router = Router()
 
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 @router.message(Command("add"))
 async def cmd_add_track(message: Message, state: FSMContext):
@@ -56,6 +58,10 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
     token = data.get("token")
     playlist_kind = data.get("playlist_kind")
 
+    if message.audio.file_size and message.audio.file_size > MAX_FILE_SIZE:
+        await message.reply("❌ Файл слишком большой. Максимальный размер — 50 МБ.")
+        return
+
     status_msg = await message.reply("⏳ Скачиваю файл...")
 
     file_id = message.audio.file_id
@@ -66,6 +72,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
     os.makedirs(file_dir, exist_ok=True)
     file_path = os.path.join(file_dir, safe_filename)
 
+    cover_path = None
     try:
         await bot.download(message.audio, destination=file_path)
 
@@ -73,7 +80,9 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
 
         artist_fallback = message.audio.performer or "Unknown Artist"
         title_fallback = message.audio.title or None
-        artist, title, cover_path = extract_metadata(file_path, artist_fallback, title_fallback)
+        artist, title, cover_path = await asyncio.to_thread(
+            extract_metadata, file_path, artist_fallback, title_fallback
+        )
 
         await status_msg.edit_text(f"🚀 Загружаю в Яндекс: <b>{html.escape(artist)} - {html.escape(title)}</b>...", parse_mode="HTML")
 
