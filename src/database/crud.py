@@ -1,4 +1,4 @@
-from sqlalchemy import select, update, delete, func, desc, case
+from sqlalchemy import select, update, delete, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import User, Track, Playlist
 from src.utils.crypto import encrypt_token, decrypt_token
@@ -143,11 +143,17 @@ async def set_active_playlist(session: AsyncSession, tg_id: int, playlist_id: in
     if not user:
         return
 
-    # Единый атомарный UPDATE: is_active=True только для нужного плейлиста, остальные False
+    # Сначала снимаем активность со всех плейлистов пользователя,
+    # потом ставим нужный — иначе partial unique index нарушается
     await session.execute(
         update(Playlist)
         .where(Playlist.user_id == user.id)
-        .values(is_active=case((Playlist.id == playlist_id, True), else_=False))
+        .values(is_active=False)
+    )
+    await session.execute(
+        update(Playlist)
+        .where(Playlist.user_id == user.id, Playlist.id == playlist_id)
+        .values(is_active=True)
     )
 
     await session.commit()
