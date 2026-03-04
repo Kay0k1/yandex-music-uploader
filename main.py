@@ -46,7 +46,7 @@ async def main():
 
     server_url = os.getenv("TELEGRAM_API_URL")
     if server_url:
-        bot_kwargs["server"] = TelegramAPIServer.from_base(server_url)
+        bot_kwargs["server"] = TelegramAPIServer.from_base(server_url, is_local=True)
         logger.info(f"Используется локальный сервер Telegram API: {server_url}")
 
     bot = Bot(**bot_kwargs)
