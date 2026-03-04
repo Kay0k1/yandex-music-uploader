@@ -17,7 +17,7 @@ import pathlib
 from src.database.models import async_main
 
 from src.handlers.start import router as start_router
-from src.handlers.token import router as token_router
+
 from src.handlers.auth import router as auth_router
 from src.handlers.playlist import router as playlist_router
 from src.handlers.upload import router as upload_router
@@ -73,7 +73,7 @@ async def main():
     dp.message.outer_middleware(CheckTokenMiddleware())
 
     dp.include_router(start_router)
-    dp.include_router(token_router)
+
     dp.include_router(auth_router)
     dp.include_router(playlist_router)
     dp.include_router(upload_router)

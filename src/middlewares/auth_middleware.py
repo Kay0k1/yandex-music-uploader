@@ -1,12 +1,9 @@
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import Message
-from aiogram.fsm.context import FSMContext
 
 from src.database import crud
 from src.database.models import async_session
-from src.utils.states import UserSteps
-from src.utils.texts import set_token_text
 
 
 class CheckTokenMiddleware(BaseMiddleware):
@@ -23,17 +20,11 @@ class CheckTokenMiddleware(BaseMiddleware):
         if not user:
             return await handler(event, data)
 
-        allowed_commands = ['/start', '/help', '/set_token', '/cancel']
+        allowed_commands = ['/start', '/help', '/auth']
         
         if event.text:
             command = event.text.split()[0].lower()
-            if command in allowed_commands or event.text.lower() == "отмена":
-                return await handler(event, data)
-
-        state: FSMContext = data.get("state")
-        if state:
-            current_state = await state.get_state()
-            if current_state == UserSteps.waiting_for_token:
+            if command in allowed_commands:
                 return await handler(event, data)
 
         tg_id = user.id
@@ -49,7 +40,8 @@ class CheckTokenMiddleware(BaseMiddleware):
             return await handler(event, data)
         else:
             await event.answer(
-                "⚠️ <b>Доступ запрещен.</b>\n\n" + set_token_text,
+                "⚠️ <b>Доступ запрещен.</b>\n\n"
+                "Сначала авторизуйся через /start или /auth",
                 parse_mode="HTML"
             )
             return

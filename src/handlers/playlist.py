@@ -20,7 +20,7 @@ async def cmd_set_playlist(message: Message, state: FSMContext):
         token = await crud.get_token(session, tg_id)
 
     if not token:
-        await message.answer("Сначала установи токен через /set_token")
+        await message.answer("Сначала авторизуйся через /auth")
         return
 
     wait_message = await message.answer("⏳ Подключаюсь к Яндексу и получаю список плейлистов...")

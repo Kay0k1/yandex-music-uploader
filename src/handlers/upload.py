@@ -27,7 +27,7 @@ async def cmd_add_track(message: Message, state: FSMContext):
         playlist = await crud.get_active_playlist(session, tg_id)
 
     if not token:
-        await message.answer("Сначала установи токен: /set_token")
+        await message.answer("Сначала авторизуйся через /auth")
         return
 
     if not playlist:
