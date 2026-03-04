@@ -48,21 +48,16 @@ async def main():
 
     server_url = os.getenv("TELEGRAM_API_URL")
     if server_url:
+        local_path = pathlib.Path("/var/lib/telegram-bot-api")
         bot_kwargs["session"] = AiohttpSession(
             api=TelegramAPIServer.from_base(
                 server_url,
-                is_local=True
+                is_local=True,
+                wrap_local_file=SimpleFilesPathWrapper(
+                    server_path=local_path,
+                    local_path=local_path
+                )
             )
-        )
-        # Because we run inside docker and both containers mount the same volume
-        # to `/var/lib/telegram-bot-api`, we can use SimpleFilesPathWrapper.
-        # However, looking at telegram-bot-api command from `ps aux`:
-        # telegram-bot-api --dir=/var/lib/telegram-bot-api --temp-dir=/tmp/telegram-bot-api
-        # It means the server will return paths like `/var/lib/telegram-bot-api/xxx`
-        # And our bot container also has `/var/lib/telegram-bot-api/xxx`, so they match perfectly!
-        bot_kwargs["session"].api.wrap_local_file = SimpleFilesPathWrapper(
-            server_path=pathlib.Path("/var/lib/telegram-bot-api"),
-            local_path=pathlib.Path("/var/lib/telegram-bot-api")
         )
         logger.info(f"Используется локальный сервер Telegram API: {server_url}")
 
