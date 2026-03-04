@@ -16,7 +16,7 @@ router = Router()
 
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+MAX_FILE_SIZE = 800 * 1024 * 1024  # 800 MB
 
 @router.message(Command("add"))
 async def cmd_add_track(message: Message, state: FSMContext):
