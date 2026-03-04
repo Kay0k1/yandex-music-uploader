@@ -16,7 +16,7 @@ router = Router()
 
 DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-MAX_FILE_SIZE = 800 * 1024 * 1024  # 800 MB
+MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
 
 @router.message(Command("add"))
 async def cmd_add_track(message: Message, state: FSMContext):
@@ -59,7 +59,7 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
     playlist_kind = data.get("playlist_kind")
 
     if message.audio.file_size and message.audio.file_size > MAX_FILE_SIZE:
-        await message.reply("❌ Файл слишком большой. Максимальный размер — 50 МБ.")
+        await message.reply("❌ Файл слишком большой. Максимальный размер — 2 ГБ.")
         return
 
     status_msg = await message.reply("⏳ Скачиваю файл...")

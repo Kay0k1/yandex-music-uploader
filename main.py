@@ -8,6 +8,7 @@ load_dotenv()
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
@@ -35,13 +36,20 @@ async def main():
         logger.error("Установите BOT_TOKEN")
         sys.exit(1)
 
-    bot = Bot(
-        token=bot_token,
-        default=DefaultBotProperties(
+    bot_kwargs = {
+        "token": bot_token,
+        "default": DefaultBotProperties(
             parse_mode=ParseMode.HTML,
             link_preview_is_disabled=True
         )
-    )
+    }
+
+    server_url = os.getenv("TELEGRAM_API_URL")
+    if server_url:
+        bot_kwargs["server"] = TelegramAPIServer.from_base(server_url)
+        logger.info(f"Используется локальный сервер Telegram API: {server_url}")
+
+    bot = Bot(**bot_kwargs)
 
     dp = Dispatcher(storage=MemoryStorage())
 
