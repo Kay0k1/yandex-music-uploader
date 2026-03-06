@@ -18,6 +18,8 @@ DOWNLOAD_DIR = "downloads"
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
 
+AD_COVER_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates", "bot_fallback_cover.png")
+
 @router.message(Command("add"))
 async def cmd_add_track(message: Message, state: FSMContext):
     tg_id = message.from_user.id
@@ -112,9 +114,9 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
 
         if cover_path:
             photo = FSInputFile(cover_path)
-            await message.answer_photo(photo, caption=success_text, parse_mode="HTML")
         else:
-            await message.answer(success_text, parse_mode="HTML")
+            photo = FSInputFile(AD_COVER_PATH)
+        await message.answer_photo(photo, caption=success_text, parse_mode="HTML")
 
     except Exception as e:
         import traceback
