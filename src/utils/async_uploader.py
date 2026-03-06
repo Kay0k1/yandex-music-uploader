@@ -1,4 +1,5 @@
 import os
+import asyncio
 import urllib.parse
 from typing import Optional
 from yandex_music import ClientAsync
@@ -44,20 +45,28 @@ async def upload_track_async(
             raise Exception(f"No upload URL in response. Data: {data}")
 
         logger.info(f"Uploading file to: {upload_url}")
-        form = aiohttp.FormData()
-        with open(file_path, 'rb') as f:
-            form.add_field('file', f, filename=file_name)
 
-            async with session.post(upload_url, data=form, timeout=300) as resp:
-                result_text = await resp.text()
-                logger.info(f"Upload Result (HTTP {resp.status}): {result_text}")
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            form = aiohttp.FormData()
+            with open(file_path, 'rb') as f:
+                form.add_field('file', f, filename=file_name)
 
-                if resp.status not in (200, 201):
-                    raise Exception(f"Upload failed: HTTP {resp.status}. Response: {result_text}")
+                async with session.post(upload_url, data=form, timeout=300) as resp:
+                    result_text = await resp.text()
+                    logger.info(f"Upload Result (attempt {attempt}, HTTP {resp.status}): {result_text}")
 
-                upper_text = result_text.upper()
-                if 'OK' not in upper_text and 'CREATED' not in upper_text:
-                    raise Exception(f"Upload unexpected body: {result_text}")
+                    if resp.status not in (200, 201):
+                        raise Exception(f"Upload failed: HTTP {resp.status}. Response: {result_text}")
+
+                    upper_text = result_text.upper()
+                    if 'OK' in upper_text or 'CREATED' in upper_text:
+                        break  # успех
+                    elif attempt < max_retries:
+                        logger.warning(f"Upload attempt {attempt} got empty/unexpected body, retrying in 2s...")
+                        await asyncio.sleep(2)
+                    else:
+                        raise Exception(f"Upload failed after {max_retries} attempts. Last body: {result_text}")
 
     if title and track_id:
         logger.info(f"Renaming track {track_id} to: {artist} - {title}")
