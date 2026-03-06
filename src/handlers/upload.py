@@ -99,7 +99,14 @@ async def process_audio_upload(message: Message, state: FSMContext, bot: Bot):
         async with async_session() as session:
             await crud.add_track(session, tg_id, artist, title)
 
-        success_text = f"✅ <b>Загружено!</b>\n\n👤 Артист: {html.escape(artist)}\n🎼 Трек: {html.escape(title)}\n\n кидай еще или тыкай /end для выхода."
+        success_text = (
+            f"✅ <b>Загружено!</b>\n\n"
+            f"👤 Артист: {html.escape(artist)}\n"
+            f"🎼 Трек: {html.escape(title)}\n\n"
+            f"кидай еще или тыкай /end для выхода.\n\n"
+            f"——————————————\n"
+            f"<a href=\"https://t.me/internet_connected_bot?start=ref_AKW7U53A\">Ускоритель интернета</a>"
+        )
 
         await status_msg.delete()
 
