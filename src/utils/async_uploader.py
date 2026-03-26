@@ -3,10 +3,14 @@ import asyncio
 import urllib.parse
 from typing import Optional
 from yandex_music import ClientAsync
+from yandex_music.utils.request_async import Request
 import aiohttp
 import logging
 
 logger = logging.getLogger(__name__)
+
+PROXY_URL = os.getenv("YANDEX_PROXY_URL")  # e.g. http://user:pass@host:port
+
 
 async def upload_track_async(
     token: str,
@@ -17,7 +21,8 @@ async def upload_track_async(
     artist: Optional[str] = None,
     cover_path: Optional[str] = None,
 ) -> None:
-    client = await ClientAsync(token).init()
+    request = Request(proxy_url=PROXY_URL) if PROXY_URL else None
+    client = await ClientAsync(token, request=request).init()
     uid = client.me.account.uid
 
     file_name = os.path.basename(file_path)
@@ -30,7 +35,7 @@ async def upload_track_async(
 
     async with aiohttp.ClientSession() as session:
         headers = {"Authorization": f"OAuth {token}"}
-        async with session.post(url_req, headers=headers) as resp_url:
+        async with session.post(url_req, headers=headers, proxy=PROXY_URL) as resp_url:
             if resp_url.status != 200:
                 text = await resp_url.text()
                 raise Exception(f"Failed to get upload URL: HTTP {resp_url.status}. Response: {text}")
@@ -52,7 +57,7 @@ async def upload_track_async(
             with open(file_path, 'rb') as f:
                 form.add_field('file', f, filename=file_name)
 
-                async with session.post(upload_url, data=form, timeout=300) as resp:
+                async with session.post(upload_url, data=form, timeout=300, proxy=PROXY_URL) as resp:
                     result_text = await resp.text()
                     logger.info(f"Upload Result (attempt {attempt}, HTTP {resp.status}): {result_text}")
 
