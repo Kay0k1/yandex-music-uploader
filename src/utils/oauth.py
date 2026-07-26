@@ -24,6 +24,24 @@ CLIENT_SECRET = os.getenv('YANDEX_CLIENT_SECRET', '53bc75238f0c4d08a118e51fe9203
 DEVICE_CODE_URL = 'https://oauth.yandex.ru/device/code'
 TOKEN_URL = 'https://oauth.yandex.ru/token'
 
+PROXY_URL = os.getenv("YANDEX_PROXY_URL")
+
+
+async def _post(session: aiohttp.ClientSession, url: str, data: dict):
+    """
+    POST через RU-прокси (как и остальные вызовы к Яндексу), но с откатом
+    на прямое соединение: смерть прокси не должна ронять ещё и авторизацию.
+    """
+    if PROXY_URL:
+        try:
+            return await session.post(url, data=data, proxy=PROXY_URL)
+        except aiohttp.ClientProxyConnectionError as e:
+            logger.warning(f"OAuth: proxy unavailable ({e}), falling back to direct")
+        except aiohttp.ClientHttpProxyError as e:
+            logger.warning(f"OAuth: proxy error ({e}), falling back to direct")
+
+    return await session.post(url, data=data)
+
 
 async def request_device_code() -> dict:
     """
@@ -42,7 +60,7 @@ async def request_device_code() -> dict:
         data = {
             'client_id': CLIENT_ID,
         }
-        async with session.post(DEVICE_CODE_URL, data=data) as resp:
+        async with await _post(session, DEVICE_CODE_URL, data) as resp:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(f"Failed to get device code: {text}")
@@ -72,7 +90,7 @@ async def poll_for_token(device_code: str, interval: int = 5, timeout: int = 300
                 'client_secret': CLIENT_SECRET,
             }
 
-            async with session.post(TOKEN_URL, data=data) as resp:
+            async with await _post(session, TOKEN_URL, data) as resp:
                 result = await resp.json()
 
                 if resp.status == 200 and 'access_token' in result:
