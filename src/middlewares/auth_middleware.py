@@ -21,11 +21,14 @@ class CheckTokenMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         allowed_commands = ['/start', '/help', '/auth']
-        
+
         if event.text:
-            command = event.text.split()[0].lower()
-            if command in allowed_commands:
-                return await handler(event, data)
+            parts = event.text.split()
+            if parts:
+                # отсекаем суффикс @botname у команд из групп
+                command = parts[0].lower().split('@')[0]
+                if command in allowed_commands:
+                    return await handler(event, data)
 
         tg_id = user.id
         has_token = False

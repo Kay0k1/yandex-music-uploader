@@ -1,8 +1,11 @@
+import os
+import logging
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from yandex_music import ClientAsync
+from yandex_music.utils.request_async import Request
 
 from src.database import crud
 from src.database.models import async_session
@@ -11,6 +14,9 @@ from src.utils.keyboards import get_playlists_keyboard, PlaylistCallback
 from src.handlers.auth import get_auth_keyboard
 
 router = Router()
+logger = logging.getLogger(__name__)
+
+PROXY_URL = os.getenv("YANDEX_PROXY_URL")
 
 @router.message(Command("set_playlist"))
 async def cmd_set_playlist(message: Message, state: FSMContext):
@@ -26,7 +32,8 @@ async def cmd_set_playlist(message: Message, state: FSMContext):
     wait_message = await message.answer("⏳ Подключаюсь к Яндексу и получаю список плейлистов...")
 
     try:
-        client = await ClientAsync(token).init()
+        request = Request(proxy_url=PROXY_URL) if PROXY_URL else None
+        client = await ClientAsync(token, request=request).init()
         yandex_playlists = await client.users_playlists_list()
         
         if not yandex_playlists:
@@ -50,8 +57,12 @@ async def cmd_set_playlist(message: Message, state: FSMContext):
             reply_markup=get_playlists_keyboard(playlists_objects)
         )
 
-    except Exception as e:
-        await wait_message.edit_text(f"Произошла ошибка при получении данных от Яндекса: {e}")
+    except Exception:
+        logger.exception("Failed to fetch playlists for tg_id=%s", tg_id)
+        await wait_message.edit_text(
+            "❌ Не удалось получить плейлисты от Яндекса. "
+            "Попробуй ещё раз через минуту, а если не поможет — переавторизуйся: /auth"
+        )
 
 
 @router.callback_query(PlaylistCallback.filter(F.action == "select"))

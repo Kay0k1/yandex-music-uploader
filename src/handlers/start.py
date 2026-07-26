@@ -1,4 +1,5 @@
-from aiogram import Router, F
+from aiogram import Router
+from aiogram.filters import CommandStart
 from aiogram.types import Message
 
 from src.utils.texts import welcome_no_auth, welcome_with_auth
@@ -9,7 +10,7 @@ from src.database.models import async_session
 
 router = Router()
 
-@router.message(F.text == "/start")
+@router.message(CommandStart())
 async def cmdstart(message: Message):
     tg_id = message.from_user.id
 

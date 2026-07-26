@@ -11,6 +11,49 @@ logger = logging.getLogger(__name__)
 
 PROXY_URL = os.getenv("YANDEX_PROXY_URL")  # e.g. http://user:pass@host:port
 
+# Внутренние веб-ручки music.yandex.ru отвечают только на запросы, похожие на
+# браузерные: без Referer/User-Agent/X-Retpath-Y они отдают 404.
+_WEB_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
+
+def _web_headers(token: str, uid) -> dict:
+    return {
+        "Authorization": f"OAuth {token}",
+        "User-Agent": _WEB_UA,
+        "Referer": "https://music.yandex.ru/users/me/tracks",
+        "Origin": "https://music.yandex.ru",
+        "X-Retpath-Y": "https://music.yandex.ru",
+        "X-Current-UID": str(uid),
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+    }
+
+
+async def _post_web_handler(session, url: str, headers: dict, *, json=None, data=None,
+                            params=None, timeout: int = 30) -> bool:
+    """
+    Дёргает внутреннюю ручку music.yandex.ru и подробно логирует результат.
+    Библиотечный client.request прятал всё под «Unknown HTTPError», из-за чего
+    причина сбоя была не видна. Возвращает True при успехе.
+    """
+    try:
+        async with session.post(url, headers=headers, json=json, data=data,
+                                params=params, timeout=timeout, proxy=PROXY_URL) as resp:
+            body = (await resp.text())[:300]
+            if resp.status == 200:
+                logger.info(f"Web handler OK: {url.rsplit('/', 1)[-1]}")
+                return True
+            logger.error(
+                f"Web handler FAILED: {url} -> HTTP {resp.status}; body: {body!r}"
+            )
+            return False
+    except Exception as e:
+        logger.error(f"Web handler EXCEPTION: {url} -> {type(e).__name__}: {e!r}")
+        return False
+
 
 async def upload_track_async(
     token: str,
@@ -20,7 +63,8 @@ async def upload_track_async(
     title: Optional[str] = None,
     artist: Optional[str] = None,
     cover_path: Optional[str] = None,
-) -> None:
+) -> list[str]:
+    """Загружает трек. Возвращает список нефатальных проблем: "name" / "cover"."""
     request = Request(proxy_url=PROXY_URL) if PROXY_URL else None
     client = await ClientAsync(token, request=request).init()
     uid = client.me.account.uid
@@ -73,35 +117,53 @@ async def upload_track_async(
                     else:
                         raise Exception(f"Upload failed after {max_retries} attempts. Last body: {result_text}")
 
-    if title and track_id:
-        logger.info(f"Renaming track {track_id} to: {artist} - {title}")
-        full_title = f"{artist} - {title}" if artist and artist != "Unknown Artist" else title
+    # Шаги ниже — «косметика» поверх уже залитого трека. Если они падают,
+    # файл всё равно в плейлисте, поэтому не роняем загрузку, а возвращаем
+    # предупреждения наверх, чтобы честно сказать об этом пользователю.
+    warnings: list[str] = []
 
-        try:
-            await client.request.post(
-                url="https://music.yandex.ru/api/v2/handlers/edit-track-name",
+    headers = _web_headers(token, uid)
+
+    async with aiohttp.ClientSession() as web:
+        if title and track_id:
+            logger.info(f"Renaming track {track_id} to: {artist} - {title}")
+            full_title = f"{artist} - {title}" if artist and artist != "Unknown Artist" else title
+
+            ok = await _post_web_handler(
+                web,
+                "https://music.yandex.ru/api/v2/handlers/edit-track-name",
+                headers,
                 json={"trackId": track_id, "value": full_title},
                 timeout=10,
             )
-        except Exception as e:
-            logger.error(f"Failed to rename track: {e}")
-            pass
+            if not ok:
+                warnings.append("name")
 
-    if cover_path and os.path.exists(cover_path) and track_id:
-        logger.info(f"Uploading cover for track {track_id}")
-        try:
-            with open(cover_path, "rb") as img:
-                file_bytes = img.read()
+        if cover_path and os.path.exists(cover_path) and track_id:
+            logger.info(f"Uploading cover for track {track_id}")
+            try:
+                with open(cover_path, "rb") as img:
+                    file_bytes = img.read()
+            except OSError as e:
+                logger.error(f"Cannot read cover {cover_path}: {e}")
+                file_bytes = None
 
-            form_cover = aiohttp.FormData()
-            form_cover.add_field('cover', file_bytes, filename='cover.jpg', content_type='image/jpeg')
+            if file_bytes:
+                form_cover = aiohttp.FormData()
+                form_cover.add_field('cover', file_bytes, filename='cover.jpg',
+                                     content_type='image/jpeg')
 
-            await client.request.post(
-                url="https://music.yandex.ru/api/v2/handlers/edit-track-cover",
-                params={"trackId": track_id},
-                data=form_cover,
-                timeout=30,
-            )
-        except Exception as e:
-            logger.error(f"Failed to upload cover: {e}")
-            pass
+                ok = await _post_web_handler(
+                    web,
+                    "https://music.yandex.ru/api/v2/handlers/edit-track-cover",
+                    headers,
+                    data=form_cover,
+                    params={"trackId": track_id},
+                    timeout=30,
+                )
+                if not ok:
+                    warnings.append("cover")
+            else:
+                warnings.append("cover")
+
+    return warnings

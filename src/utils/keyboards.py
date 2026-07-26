@@ -11,13 +11,15 @@ def get_playlists_keyboard(playlists: list) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
     for pl in playlists:
-        style = "success" if pl.is_active else "danger"
-        text = pl.title
-        
+        # У плейлиста из Яндекса название может быть пустым, а Telegram
+        # не принимает кнопку без текста. Активный помечаем галочкой —
+        # поля style в Bot API нет, оно молча игнорировалось.
+        title = pl.title or "Без названия"
+        text = f"✅ {title}" if pl.is_active else title
+
         builder.button(
             text=text,
             callback_data=PlaylistCallback(id=pl.id, action="select"),
-            style=style
         )
 
     builder.adjust(1)
@@ -26,7 +28,6 @@ def get_playlists_keyboard(playlists: list) -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="Главное меню",
             callback_data="main_menu",
-            style="primary"
         )
     )
 

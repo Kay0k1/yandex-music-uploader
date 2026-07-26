@@ -33,7 +33,13 @@ async def set_token(session: AsyncSession, tg_id: int, token: str) -> None:
         .where(User.tg_id == tg_id)
         .values(token=encrypted)
     )
-    await session.execute(stmt)
+    result = await session.execute(stmt)
+
+    # Пользователь мог не успеть создаться (авторизация по кнопке, чистая БД):
+    # без этого UPDATE не задел бы ни одной строки и токен потерялся бы молча.
+    if result.rowcount == 0:
+        session.add(User(tg_id=tg_id, token=encrypted))
+
     await session.commit()
 
 async def get_token(session: AsyncSession, tg_id: int) -> str | None:
