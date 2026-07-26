@@ -25,6 +25,7 @@ from src.handlers.help import router as help_router
 from src.handlers.admin import router as admin_router
 
 from src.middlewares.auth_middleware import CheckTokenMiddleware
+from src.utils.janitor import periodic_cleanup
 
 async def main():
     logging.basicConfig(
@@ -82,9 +83,16 @@ async def main():
         return
 
     await bot.delete_webhook(drop_pending_updates=True)
-    
+
+    # Локальный telegram-bot-api не удаляет скачанные файлы сам — иначе том
+    # растёт до отказа диска. Держим ссылку, чтобы задачу не собрал GC.
+    cleanup_task = asyncio.create_task(periodic_cleanup())
+
     logger.info("Бот запущен...")
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        cleanup_task.cancel()
 
 if __name__ == "__main__":
     try:    
