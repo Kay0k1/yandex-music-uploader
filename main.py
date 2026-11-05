@@ -82,7 +82,8 @@ async def main():
         logger.error(f"Ошибка подключения к БД: {e}")
         return
 
-    await bot.delete_webhook(drop_pending_updates=True)
+    # Preserve messages queued while the bot or local API was unavailable.
+    await bot.delete_webhook(drop_pending_updates=False)
 
     # Локальный telegram-bot-api не удаляет скачанные файлы сам — иначе том
     # растёт до отказа диска. Держим ссылку, чтобы задачу не собрал GC.

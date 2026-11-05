@@ -12,6 +12,9 @@ import os
 import aiohttp
 import asyncio
 import logging
+from src.utils.yandex_proxy import (
+    PROXY_URL, HTTP_PROXY_URL, PROXY_ERRORS, create_yandex_session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,24 +26,30 @@ CLIENT_SECRET = os.getenv('YANDEX_CLIENT_SECRET', '53bc75238f0c4d08a118e51fe9203
 
 DEVICE_CODE_URL = 'https://oauth.yandex.ru/device/code'
 TOKEN_URL = 'https://oauth.yandex.ru/token'
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20, connect=10)
+_GATEWAY_ERRORS = (502, 503, 504)
 
-PROXY_URL = os.getenv("YANDEX_PROXY_URL")
-
-
-async def _post(session: aiohttp.ClientSession, url: str, data: dict):
+async def _post(session: aiohttp.ClientSession, direct: aiohttp.ClientSession,
+                url: str, data: dict):
     """
     POST через RU-прокси (как и остальные вызовы к Яндексу), но с откатом
     на прямое соединение: смерть прокси не должна ронять ещё и авторизацию.
     """
     if PROXY_URL:
         try:
-            return await session.post(url, data=data, proxy=PROXY_URL)
-        except aiohttp.ClientProxyConnectionError as e:
-            logger.warning(f"OAuth: proxy unavailable ({e}), falling back to direct")
-        except aiohttp.ClientHttpProxyError as e:
-            logger.warning(f"OAuth: proxy error ({e}), falling back to direct")
+            response = await session.post(
+                url, data=data, proxy=HTTP_PROXY_URL, timeout=REQUEST_TIMEOUT)
+            if response.status not in _GATEWAY_ERRORS:
+                return response
+            logger.warning("OAuth: proxy returned HTTP %s, falling back to direct",
+                           response.status)
+            response.close()
+        except (aiohttp.ClientConnectionError, aiohttp.ClientHttpProxyError,
+                asyncio.TimeoutError) + PROXY_ERRORS as e:
+            logger.warning("OAuth: proxy unavailable (%s), falling back to direct",
+                           type(e).__name__)
 
-    return await session.post(url, data=data)
+    return await direct.post(url, data=data, timeout=REQUEST_TIMEOUT)
 
 
 async def request_device_code() -> dict:
@@ -56,11 +65,11 @@ async def request_device_code() -> dict:
             'interval': int
         }
     """
-    async with aiohttp.ClientSession() as session:
+    async with create_yandex_session() as session, aiohttp.ClientSession() as direct:
         data = {
             'client_id': CLIENT_ID,
         }
-        async with await _post(session, DEVICE_CODE_URL, data) as resp:
+        async with await _post(session, direct, DEVICE_CODE_URL, data) as resp:
             if resp.status != 200:
                 text = await resp.text()
                 raise Exception(f"Failed to get device code: {text}")
@@ -79,7 +88,7 @@ async def poll_for_token(device_code: str, interval: int = 5, timeout: int = 300
     Returns:
         str: access_token при успехе, None при таймауте
     """
-    async with aiohttp.ClientSession() as session:
+    async with create_yandex_session() as session, aiohttp.ClientSession() as direct:
         elapsed = 0
         
         while elapsed < timeout:
@@ -90,7 +99,7 @@ async def poll_for_token(device_code: str, interval: int = 5, timeout: int = 300
                 'client_secret': CLIENT_SECRET,
             }
 
-            async with await _post(session, TOKEN_URL, data) as resp:
+            async with await _post(session, direct, TOKEN_URL, data) as resp:
                 result = await resp.json()
 
                 if resp.status == 200 and 'access_token' in result:

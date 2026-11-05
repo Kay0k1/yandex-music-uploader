@@ -52,8 +52,10 @@ Note: `docker-compose.yml` is gitignored — only `docker-compose.example.yml` i
   rewritten on next auth.
 - MemoryStorage FSM → upload-mode state (incl. the decrypted token) is held in memory and lost on
   restart. One active playlist per user is enforced by a partial unique index (`ix_user_active_playlist`).
-- Optional outbound proxy for all Yandex calls via `YANDEX_PROXY_URL` (used in `async_uploader.py`
-  and `playlist.py`).
+- Optional HTTP/SOCKS5 proxy for Yandex API, OAuth and web handlers via `YANDEX_PROXY_URL`
+  (`src/utils/yandex_proxy.py`). Signed music-loader file uploads prefer a separate direct
+  connection, with the configured proxy as a fallback using the same upload target/track ID.
+  An empty upload response is accepted only after confirming the track in the playlist.
 - The upload success message injects a hardcoded referral/ad link (`t.me/internet_connected_bot`).
 - `backup.sql` / `backup_new.sql` are gitignored PostgreSQL dumps present in the repo root — do NOT
   read/dump them (may contain real encrypted tokens and user data). `get-docker.sh` is the standard

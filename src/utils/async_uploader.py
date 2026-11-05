@@ -1,27 +1,27 @@
 import os
 import asyncio
+import json
 import urllib.parse
 from typing import Optional
 from yandex_music import ClientAsync
-from yandex_music.utils.request_async import Request
 from yandex_music.exceptions import NetworkError
 import aiohttp
 import logging
+from src.utils.yandex_proxy import (
+    YandexRequest as Request, PROXY_URL, HTTP_PROXY_URL, PROXY_ERRORS,
+    create_yandex_session,
+)
 
 logger = logging.getLogger(__name__)
 
-PROXY_URL = os.getenv("YANDEX_PROXY_URL")  # e.g. http://user:pass@host:port
-
 # Сколько раз повторять заливку и сколько ждать между попытками.
-# RU-прокси сейчас настолько шумный, что 3 попытки подряд нередко все ловят
-# 502/оборванное тело — по логам это ~60% полных провалов. 6 попыток вместо 3.
 UPLOAD_MAX_RETRIES = 6
 UPLOAD_RETRY_BASE_DELAY = 2  # секунды, умножается на номер попытки
 
 # Сетевые сбои, которые лечатся повтором. RU-прокси периодически отдаёт
 # 502 Bad Gateway (ClientHttpProxyError) на отдельные music-loader хосты —
 # без этого повтора одна такая осечка = провал загрузки для пользователя.
-_RETRYABLE_EXC = (aiohttp.ClientError, asyncio.TimeoutError, NetworkError)
+_RETRYABLE_EXC = (aiohttp.ClientError, asyncio.TimeoutError, NetworkError) + PROXY_ERRORS
 
 
 class _RetryableUploadError(Exception):
@@ -57,7 +57,7 @@ async def _post_web_handler(session, url: str, headers: dict, *, json=None, data
     """
     try:
         async with session.post(url, headers=headers, json=json, data=data,
-                                params=params, timeout=timeout, proxy=PROXY_URL) as resp:
+                                params=params, timeout=timeout, proxy=HTTP_PROXY_URL) as resp:
             body = (await resp.text())[:300]
             if resp.status == 200:
                 logger.info(f"Web handler OK: {url.rsplit('/', 1)[-1]}")
@@ -71,18 +71,12 @@ async def _post_web_handler(session, url: str, headers: dict, *, json=None, data
         return False
 
 
-async def _acquire_target_and_upload(session, url_req: str, headers: dict,
-                                     file_path: str, file_name: str, attempt: int) -> Optional[str]:
-    """
-    Берёт у Яндекса свежий upload-target и заливает в него файл.
-    Возвращает ugc-track-id. Временные сбои поднимает как _RetryableUploadError.
-
-    Target выдаётся на конкретный music-loader хост, и сбои обычно привязаны
-    именно к хосту (у прокси нет до него живого маршрута). Поэтому повтор
-    запрашивает НОВЫЙ target, а не долбится в тот же адрес.
-    """
+async def _request_upload_target(session, url_req, headers, proxy):
     try:
-        async with session.post(url_req, headers=headers, proxy=PROXY_URL) as resp_url:
+        async with session.post(
+            url_req, headers=headers, proxy=proxy,
+            timeout=aiohttp.ClientTimeout(total=30, connect=10),
+        ) as resp_url:
             text = None
             if resp_url.status != 200:
                 text = await resp_url.text()
@@ -91,11 +85,25 @@ async def _acquire_target_and_upload(session, url_req: str, headers: dict,
                     raise Exception(
                         f"Failed to get upload URL: HTTP {resp_url.status}. Response: {text}")
                 raise _RetryableUploadError(f"upload-url HTTP {resp_url.status}: {text[:200]}")
-            data = await resp_url.json()
+            return await resp_url.json()
     except _RetryableUploadError:
         raise
     except _RETRYABLE_EXC as e:
         raise _RetryableUploadError(f"upload-url {type(e).__name__}: {e}") from e
+
+
+async def _acquire_target_and_upload(session, url_req: str, headers: dict,
+                                     file_path: str, file_name: str, attempt: int) -> Optional[str]:
+    """Request an upload target, then upload and confirm the file."""
+    try:
+        data = await _request_upload_target(session, url_req, headers, HTTP_PROXY_URL)
+    except _RetryableUploadError:
+        if not PROXY_URL:
+            raise
+        # No audio has been sent yet, so obtaining another target is safe.
+        logger.warning("Upload target request via proxy failed; trying directly")
+        async with aiohttp.ClientSession() as direct:
+            data = await _request_upload_target(direct, url_req, headers, None)
 
     logger.info(f"Yandex Upload URL Data: {data}")
 
@@ -107,29 +115,80 @@ async def _acquire_target_and_upload(session, url_req: str, headers: dict,
 
     logger.info(f"Uploading file to: {upload_url}")
 
+    # API/OAuth need the RU proxy, but signed loader targets also work directly.
+    # This proxy can return an empty 200 without storing the file. Prefer direct
+    # upload; a separate session avoids inheriting the API's SOCKS connector.
+    async with aiohttp.ClientSession() as direct:
+        routes = [(direct, None)]
+        if PROXY_URL:
+            routes.append((session, HTTP_PROXY_URL))
+        for index, (upload_session, proxy) in enumerate(routes):
+            try:
+                confirmed = await _post_upload(
+                    upload_session, upload_url, file_path, file_name, attempt, proxy
+                )
+                if not confirmed and (not track_id or not await _confirm_uploaded_track(
+                    session, url_req, headers, track_id
+                )):
+                    raise _RetryableUploadError(
+                        "Yandex did not confirm the uploaded track in the playlist")
+                return track_id
+            except (_RetryableUploadError,) + _RETRYABLE_EXC as exc:
+                if index + 1 < len(routes):
+                    # Reuse the same target and track ID so a late success cannot
+                    # create a second copy when the backup route is tried.
+                    logger.warning("Direct upload failed (%s); trying the proxy",
+                                   type(exc).__name__)
+                    continue
+                if isinstance(exc, _RetryableUploadError):
+                    raise
+                raise _RetryableUploadError(
+                    f"upload {type(exc).__name__}") from exc
+
+
+async def _post_upload(session, upload_url, file_path, file_name, attempt, proxy):
+    form = aiohttp.FormData()
+    with open(file_path, 'rb') as file:
+        form.add_field('file', file, filename=file_name)
+        async with session.post(upload_url, data=form,
+                                timeout=aiohttp.ClientTimeout(total=300, connect=20),
+                                proxy=proxy, allow_redirects=False) as response:
+            text = await response.text()
+            logger.info("Upload Result (attempt %s, HTTP %s): %s",
+                        attempt, response.status, text[:300])
+            if response.status not in (200, 201):
+                raise _RetryableUploadError(
+                    f"upload HTTP {response.status}: {text[:200]}")
     try:
-        form = aiohttp.FormData()
-        with open(file_path, 'rb') as f:
-            form.add_field('file', f, filename=file_name)
+        result = json.loads(text)
+    except ValueError:
+        result = text.strip()
+    if isinstance(result, dict):
+        result = result.get("result")
+    return isinstance(result, str) and result.upper() in ("OK", "CREATED")
 
-            async with session.post(upload_url, data=form, timeout=300, proxy=PROXY_URL) as resp:
-                result_text = await resp.text()
-                logger.info(f"Upload Result (attempt {attempt}, HTTP {resp.status}): {result_text}")
 
-                if resp.status not in (200, 201):
-                    raise _RetryableUploadError(
-                        f"upload HTTP {resp.status}: {result_text[:200]}")
-
-                upper_text = result_text.upper()
-                if 'OK' not in upper_text and 'CREATED' not in upper_text:
-                    raise _RetryableUploadError(
-                        f"empty/unexpected upload body: {result_text[:200]!r}")
-    except _RetryableUploadError:
-        raise
-    except _RETRYABLE_EXC as e:
-        raise _RetryableUploadError(f"upload {type(e).__name__}: {e}") from e
-
-    return track_id
+async def _confirm_uploaded_track(session, url_req, headers, track_id):
+    params = urllib.parse.parse_qs(urllib.parse.urlsplit(url_req).query)
+    uid, kind = params["playlist-id"][0].split(":", 1)
+    url = f"https://api.music.yandex.net/users/{uid}/playlists/{kind}"
+    for attempt in range(5):
+        if attempt:
+            await asyncio.sleep(2)
+        try:
+            async with session.get(url, headers=headers, proxy=HTTP_PROXY_URL,
+                                   timeout=20) as response:
+                if response.status != 200:
+                    continue
+                data = await response.json()
+            tracks = (data.get("result") or {}).get("tracks") or []
+            if any(str(track.get("id", "")).split(":", 1)[0] == track_id
+                   for track in tracks):
+                logger.info("Upload confirmed by playlist membership")
+                return True
+        except _RETRYABLE_EXC:
+            continue
+    return False
 
 
 async def upload_track_async(
@@ -171,7 +230,7 @@ async def upload_track_async(
 
     logger.info(f"Requesting upload URL: {url_req}")
 
-    async with aiohttp.ClientSession() as session:
+    async with create_yandex_session() as session:
         headers = {"Authorization": f"OAuth {token}"}
 
         track_id = None
@@ -200,7 +259,7 @@ async def upload_track_async(
 
     headers = _web_headers(token, uid)
 
-    async with aiohttp.ClientSession() as web:
+    async with create_yandex_session() as web:
         if title and track_id:
             logger.info(f"Renaming track {track_id} to: {artist} - {title}")
             full_title = f"{artist} - {title}" if artist and artist != "Unknown Artist" else title

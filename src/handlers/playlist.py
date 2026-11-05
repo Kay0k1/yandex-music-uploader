@@ -1,11 +1,10 @@
-import os
 import logging
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from yandex_music import ClientAsync
-from yandex_music.utils.request_async import Request
+from src.utils.yandex_proxy import YandexRequest as Request, PROXY_URL
 
 from src.database import crud
 from src.database.models import async_session
@@ -15,8 +14,6 @@ from src.handlers.auth import get_auth_keyboard
 
 router = Router()
 logger = logging.getLogger(__name__)
-
-PROXY_URL = os.getenv("YANDEX_PROXY_URL")
 
 @router.message(Command("set_playlist"))
 async def cmd_set_playlist(message: Message, state: FSMContext):
