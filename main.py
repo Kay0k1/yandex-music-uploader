@@ -11,6 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer, SimpleFilesPathWrapper
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.fsm.storage.memory import MemoryStorage
 import pathlib
 
@@ -26,6 +27,25 @@ from src.handlers.admin import router as admin_router
 
 from src.middlewares.auth_middleware import CheckTokenMiddleware
 from src.utils.janitor import periodic_cleanup
+
+# Локальный telegram-bot-api может подняться позже бота: ждём его, а не падаем
+# на первом запросе (иначе контейнер уходит в цикл перезапусков).
+API_WAIT_ATTEMPTS = 30
+API_WAIT_DELAY = 2  # секунды
+
+
+async def wait_for_bot_api(bot: Bot, logger: logging.Logger) -> None:
+    for attempt in range(1, API_WAIT_ATTEMPTS + 1):
+        try:
+            # Preserve messages queued while the bot or local API was unavailable.
+            await bot.delete_webhook(drop_pending_updates=False)
+            return
+        except TelegramNetworkError as e:
+            if attempt == API_WAIT_ATTEMPTS:
+                raise
+            logger.warning("Telegram API ещё недоступен (%s), жду %s с...", e, API_WAIT_DELAY)
+            await asyncio.sleep(API_WAIT_DELAY)
+
 
 async def main():
     logging.basicConfig(
@@ -82,18 +102,20 @@ async def main():
         logger.error(f"Ошибка подключения к БД: {e}")
         return
 
-    # Preserve messages queued while the bot or local API was unavailable.
-    await bot.delete_webhook(drop_pending_updates=False)
-
-    # Локальный telegram-bot-api не удаляет скачанные файлы сам — иначе том
-    # растёт до отказа диска. Держим ссылку, чтобы задачу не собрал GC.
-    cleanup_task = asyncio.create_task(periodic_cleanup())
-
-    logger.info("Бот запущен...")
     try:
-        await dp.start_polling(bot)
+        await wait_for_bot_api(bot, logger)
+
+        # Локальный telegram-bot-api не удаляет скачанные файлы сам — иначе том
+        # растёт до отказа диска. Держим ссылку, чтобы задачу не собрал GC.
+        cleanup_task = asyncio.create_task(periodic_cleanup())
+
+        logger.info("Бот запущен...")
+        try:
+            await dp.start_polling(bot)
+        finally:
+            cleanup_task.cancel()
     finally:
-        cleanup_task.cancel()
+        await bot.session.close()
 
 if __name__ == "__main__":
     try:    

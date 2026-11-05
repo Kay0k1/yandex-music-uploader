@@ -4,7 +4,7 @@ import json
 import urllib.parse
 from typing import Optional
 from yandex_music import ClientAsync
-from yandex_music.exceptions import NetworkError
+from yandex_music.exceptions import NetworkError, UnauthorizedError
 import aiohttp
 import logging
 from src.utils.yandex_proxy import (
@@ -23,9 +23,18 @@ UPLOAD_RETRY_BASE_DELAY = 2  # секунды, умножается на ном�
 # без этого повтора одна такая осечка = провал загрузки для пользователя.
 _RETRYABLE_EXC = (aiohttp.ClientError, asyncio.TimeoutError, NetworkError) + PROXY_ERRORS
 
+# Сбои, при которых соединение с загрузчиком так и не открылось: файл точно
+# не ушёл. Всё остальное (таймаут, обрыв) могло случиться уже после того, как
+# Яндекс принял файл.
+_NOT_SENT_EXC = (aiohttp.ClientConnectorError, aiohttp.ClientHttpProxyError) + PROXY_ERRORS
+
 
 class _RetryableUploadError(Exception):
     """Временный сбой заливки — имеет смысл повторить с новым upload-target."""
+
+
+class UploadAuthError(Exception):
+    """Яндекс не принял токен пользователя — нужна переавторизация."""
 
 # Внутренние веб-ручки music.yandex.ru отвечают только на запросы, похожие на
 # браузерные: без Referer/User-Agent/X-Retpath-Y они отдают 404.
@@ -82,8 +91,8 @@ async def _request_upload_target(session, url_req, headers, proxy):
                 text = await resp_url.text()
                 # 401/403 — протухший токен, повторять бессмысленно.
                 if resp_url.status in (401, 403):
-                    raise Exception(
-                        f"Failed to get upload URL: HTTP {resp_url.status}. Response: {text}")
+                    raise UploadAuthError(
+                        f"upload-url HTTP {resp_url.status}: {text[:200]}")
                 raise _RetryableUploadError(f"upload-url HTTP {resp_url.status}: {text[:200]}")
             return await resp_url.json()
     except _RetryableUploadError:
@@ -122,6 +131,7 @@ async def _acquire_target_and_upload(session, url_req: str, headers: dict,
         routes = [(direct, None)]
         if PROXY_URL:
             routes.append((session, HTTP_PROXY_URL))
+        maybe_delivered = False
         for index, (upload_session, proxy) in enumerate(routes):
             try:
                 confirmed = await _post_upload(
@@ -134,12 +144,21 @@ async def _acquire_target_and_upload(session, url_req: str, headers: dict,
                         "Yandex did not confirm the uploaded track in the playlist")
                 return track_id
             except (_RetryableUploadError,) + _RETRYABLE_EXC as exc:
+                if not isinstance(exc, (_RetryableUploadError,) + _NOT_SENT_EXC):
+                    maybe_delivered = True
                 if index + 1 < len(routes):
                     # Reuse the same target and track ID so a late success cannot
                     # create a second copy when the backup route is tried.
                     logger.warning("Direct upload failed (%s); trying the proxy",
                                    type(exc).__name__)
                     continue
+                # The next attempt takes a fresh target and would add a second
+                # copy if this file already landed while the response got lost.
+                if maybe_delivered and track_id and await _confirm_uploaded_track(
+                    session, url_req, headers, track_id
+                ):
+                    logger.info("Upload response was lost, but the track is in the playlist")
+                    return track_id
                 if isinstance(exc, _RetryableUploadError):
                     raise
                 raise _RetryableUploadError(
@@ -210,6 +229,8 @@ async def upload_track_async(
         try:
             client = await ClientAsync(token, request=request).init()
             break
+        except UnauthorizedError as e:
+            raise UploadAuthError(f"client init: {e}") from e
         except _RETRYABLE_EXC as e:
             if attempt >= UPLOAD_MAX_RETRIES:
                 raise

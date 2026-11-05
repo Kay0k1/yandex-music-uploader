@@ -114,7 +114,7 @@ async def poll_for_token(device_code: str, interval: int = 5, timeout: int = 300
                 elif error == 'slow_down':
 
                     interval += 1
-                elif error in ('expired_token', 'access_denied'):
+                elif error in ('expired_token', 'access_denied', 'invalid_grant'):
 
                     logger.warning(f"OAuth: {error}")
                     return None

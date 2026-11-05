@@ -1,4 +1,4 @@
-from sqlalchemy import select, update, delete, func, desc
+from sqlalchemy import select, update, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.database.models import User, Track, Playlist
 from src.utils.crypto import encrypt_token, decrypt_token
@@ -97,6 +97,13 @@ async def sync_playlists(session: AsyncSession, tg_id: int, yandex_playlists: li
     )
     existing = {pl.kind: pl for pl in result.scalars().all()}
 
+    # Плейлист, удалённый в Яндексе, иначе остался бы кнопкой в списке,
+    # а загрузка в него падала бы.
+    remote_kinds = {str(pl.kind) for pl in yandex_playlists}
+    for kind, stale in existing.items():
+        if kind not in remote_kinds:
+            await session.delete(stale)
+
     for pl in yandex_playlists:
         kind_str = str(pl.kind)
         if kind_str in existing:
@@ -144,10 +151,17 @@ async def delete_playlist(session: AsyncSession, playlist_id: int) -> None:
     await session.execute(stmt)
     await session.commit()
     
-async def set_active_playlist(session: AsyncSession, tg_id: int, playlist_id: int) -> None:
+async def set_active_playlist(session: AsyncSession, tg_id: int, playlist_id: int) -> Playlist | None:
+    """Делает плейлист активным. None — у пользователя такого плейлиста уже нет."""
     user = await get_user(session, tg_id)
     if not user:
-        return
+        return None
+
+    playlist = await session.scalar(
+        select(Playlist).where(Playlist.user_id == user.id, Playlist.id == playlist_id)
+    )
+    if playlist is None:
+        return None
 
     # Сначала снимаем активность со всех плейлистов пользователя,
     # потом ставим нужный — иначе partial unique index нарушается
@@ -163,6 +177,8 @@ async def set_active_playlist(session: AsyncSession, tg_id: int, playlist_id: in
     )
 
     await session.commit()
+    await session.refresh(playlist)
+    return playlist
     
 async def add_track(session: AsyncSession, tg_id: int, artist: str, title: str) -> None:
     user = await get_user(session, tg_id)

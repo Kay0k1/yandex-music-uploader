@@ -75,12 +75,13 @@ async def _start_auth_flow(message: Message, tg_id: int, is_callback: bool = Fal
         _polling_tasks.add(task)
         task.add_done_callback(_polling_tasks.discard)
         
-    except Exception as e:
+    except Exception:
         logger.exception("Auth start failed for tg_id=%s", tg_id)
+        text = "❌ Яндекс сейчас не отвечает. Попробуй /auth ещё раз через минуту."
         if is_callback:
-            await message.edit_text(f"❌ Ошибка: {e}", parse_mode=None)
+            await message.edit_text(text, parse_mode=None)
         else:
-            await message.answer(f"❌ Ошибка: {e}", parse_mode=None)
+            await message.answer(text, parse_mode=None)
 
 
 async def _poll_and_save_token(msg: Message, tg_id: int, device_code: str, interval: int, timeout: int):

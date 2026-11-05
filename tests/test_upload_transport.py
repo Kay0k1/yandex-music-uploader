@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,6 +21,7 @@ class UploadTransportTests(unittest.IsolatedAsyncioTestCase):
         self.target_calls = 0
         self.fail_first_upload = False
         self.fail_first_target = False
+        self.target_status = 200
         self.redirect_requests = 0
         app = web.Application()
         app.router.add_post("/target", self.target)
@@ -45,6 +47,8 @@ class UploadTransportTests(unittest.IsolatedAsyncioTestCase):
         self.target_calls += 1
         if self.fail_first_target and self.target_calls == 1:
             return web.Response(status=504, text="upstream request timeout")
+        if self.target_status != 200:
+            return web.Response(status=self.target_status, text="denied")
         return web.json_response({"post-target": self.base + "/upload",
                                   "ugc-track-id": "track-id"})
 
@@ -100,8 +104,37 @@ class UploadTransportTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_server_response_is_retryable(self):
         self.status, self.body = 502, "Bad Gateway"
-        with self.assertRaises(uploader._RetryableUploadError):
+        with patch.object(uploader, "_confirm_uploaded_track", AsyncMock()) as verify:
+            with self.assertRaises(uploader._RetryableUploadError):
                 await self.acquire()
+            verify.assert_not_awaited()
+
+    async def test_lost_response_is_checked_in_playlist_before_retry(self):
+        with patch.object(uploader, "_post_upload", AsyncMock(side_effect=asyncio.TimeoutError())), \
+                patch.object(uploader, "_confirm_uploaded_track", AsyncMock(return_value=True)) as verify:
+            self.assertEqual(await self.acquire(), "track-id")
+            verify.assert_awaited_once()
+        self.assertEqual(self.target_calls, 1)
+
+    async def test_lost_response_without_track_in_playlist_is_retryable(self):
+        with patch.object(uploader, "_post_upload", AsyncMock(side_effect=asyncio.TimeoutError())), \
+                patch.object(uploader, "_confirm_uploaded_track", AsyncMock(return_value=False)):
+            with self.assertRaises(uploader._RetryableUploadError):
+                await self.acquire()
+
+    async def test_unsent_file_skips_playlist_check(self):
+        refused = uploader.PROXY_ERRORS[0](111, "connection refused")
+        with patch.object(uploader, "_post_upload", AsyncMock(side_effect=refused)), \
+                patch.object(uploader, "_confirm_uploaded_track", AsyncMock()) as verify:
+            with self.assertRaises(uploader._RetryableUploadError):
+                await self.acquire()
+            verify.assert_not_awaited()
+
+    async def test_rejected_token_is_not_retried(self):
+        self.target_status = 401
+        with self.assertRaises(uploader.UploadAuthError):
+            await self.acquire()
+        self.assertEqual(self.target_calls, 1)
 
     async def test_backup_route_reuses_target_and_resends_full_file(self):
         self.fail_first_upload = True
